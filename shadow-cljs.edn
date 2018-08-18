@@ -1,0 +1,9 @@
+;; shadow-cljs configuration
+{:source-paths
+ ["src"]
+
+ :dependencies [[reagent "0.8.1"]]
+
+ :builds
+ {:app {:target :npm-module
+        :output-dir "node_modules/shadow-cljs"}} }
