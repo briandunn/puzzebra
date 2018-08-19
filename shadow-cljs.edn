@@ -2,8 +2,9 @@
 {:source-paths
  ["src"]
 
- :dependencies [[reagent "0.8.1"]]
+ :dependencies [[reagent "0.8.1"]
+                [com.cognitect/transit-cljs "0.8.256"]]
 
  :builds
  {:app {:target :npm-module
-        :output-dir "node_modules/shadow-cljs"}} }
+        :output-dir "node_modules/shadow-cljs"}}}
