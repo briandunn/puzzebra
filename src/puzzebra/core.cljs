@@ -58,71 +58,74 @@
 
 (defmulti piece :clue/type)
 
-(defmethod piece :left-of [{args :clue/args}]
-  (let [cell-style {:border-bottom-width 1
+(def cell-style {:border-bottom-width 1
                     :border-color "#ccc"
                     :border-right-width 1
                     :border-style "solid"
                     :height 20
-                    :width 20}
-        cell (fn [i x y] [view {:style (merge cell-style {:background-color (row-color y)})} [text i]])
-        empty-cell (fn [x y] [view {:style cell-style}])
+                    :width 20})
+
+(defn clue-frame-style [cells-wide]
+  {:align-items "flex-start"
+                   :border-color "#ccc"
+                   :border-left-width 1
+                   :border-style "solid"
+                   :border-top-width 1
+                   :flex-direction "row"
+                   :flex-wrap "wrap"
+                   :margin 10
+                   :width (* 21 cells-wide )})
+
+(defn cell [i y]
+  [view {:style (merge cell-style {:background-color (row-color y)})}
+   [text i]])
+
+(defmethod piece :left-of [{args :clue/args}]
+  (let [empty-cell (fn [x y] [view {:style cell-style}])
         cells (for [y (let [[first-row last-row] (sort (map first args))]
                         (range first-row (+ 1 last-row)))
                     x (range 2)]
                 (let [[row value] (nth args x [])]
-                  (partial (if (= y row) (partial cell value) empty-cell) x y)))]
-    [view {:style {:align-items "flex-start"
-                   :border-color "#ccc"
-                   :border-left-width 1
-                   :border-style "solid"
-                   :border-top-width 1
-                   :flex-direction "row"
-                   :flex-wrap "wrap"
-                   :margin 10
-                   :width 42}}
+                  (partial (if (= y row) (partial cell value) empty-cell) y)))]
+    [view {:style (clue-frame-style 2)}
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defmethod piece :same-house [{args :clue/args}]
-  (let [cell-style {:border-bottom-width 1
-                    :border-color "#ccc"
-                    :border-right-width 1
-                    :border-style "solid"
-                    :height 20
-                    :width 20}
-        cell (fn [i y] [view {:style (merge cell-style {:background-color (row-color y)})} [text i]])
-        empty-cell (fn [y] [view {:style cell-style}])
+  (let [empty-cell (fn [y] [view {:style cell-style}])
         cells (for [y (let [[first-row last-row] (sort (map first args))]
                         (range first-row (+ 1 last-row)))]
                 (let [c (some (fn [[row val]] (and (= row y) val)) args)]
                   (partial (if c (partial cell c) empty-cell) y)))]
-    [view {:style {:align-items "flex-start"
-                   :border-color "#ccc"
-                   :border-left-width 1
-                   :border-style "solid"
-                   :border-top-width 1
-                   :flex-direction "row"
-                   :flex-wrap "wrap"
-                   :margin 10
-                   :width 21}}
+    [view {:style (clue-frame-style 1) }
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defmethod piece :next-to [{paths :clue/args}] [text (.stringify js/JSON (clj->js paths))])
-(defmethod piece :in-house [{paths :clue/args}] [text (.stringify js/JSON (clj->js paths))])
+
+(defn board [in-house size]
+  [view {:style (clue-frame-style size)}
+   (for [y (range size) x (range size)]
+     (let [i (some (fn [[[clue-x clue-y] i]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))]
+      (if i
+        ^{:key (str x " " y)}[cell i y]
+        ^{:key (str x " " y)}[view {:style cell-style}])))])
 
 (defn root []
-  (let [config [(list
+  (let [size 4
+        config [(list
                   {:puzzle/puzzle [:puzzle/clues :puzzle/solution]}
-                  (merge (get difficulties "normal") {:size 4}))]]
-    (.then (fetch-puzzle config) (partial reset! state)))
-  (fn []
-    [view {:style {:align-items "center"
-                   :background-color "#fff"
-                   :flex 1
-                   :justify-content "center"
-                   :padding 20}}
-     (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
-       (doall (map (fn [clue] ^{:key clue}[piece clue]) clues)))
-     ]))
+                  (merge (get difficulties "normal") {:size size}))]]
+    (.then (fetch-puzzle config) (partial reset! state))
+    (fn []
+      [view {:style {:align-items "center"
+                     :background-color "#fff"
+                     :flex 1
+                     :justify-content "center"
+                     :padding 20}}
+       (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
+         (let [[in-house other-clues] (partition-by #(= (:clue/type %) :in-house) (sort-by :clue/type clues))]
+           [view
+             [view
+              (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues ))]
+             [board in-house size]]))])))
 
 (def app (reactify-component root))
