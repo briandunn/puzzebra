@@ -52,17 +52,54 @@
       (.then #(.text %))
       (.then (partial t/read (t/reader :json))))))
 
+(def state (atom {}))
+
+(defn row-color [row-number] (nth ["#9ccc65" "#ffa726" "#fdd835" "#29b6f6"] row-number))
+
+(defmulti piece :clue/type)
+
+(defmethod piece :left-of [{args :clue/args}]
+  (let [row-offset (min (map first args))
+        cell-style {:width 20
+                    :height 20
+                    :border-color "#ccc"
+                    :border-style "solid"
+                    :border-right-width 1
+                    :border-bottom-width 1}
+        cell (fn [i x y] [view {:style (merge cell-style {:background-color (row-color y)})} [text i]])
+        empty-cell (fn [x y] [view {:style cell-style}])
+        cells (for [y (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row)))
+                    x (range 2)]
+                (let [[row value] (nth args x [])]
+                  (partial (if (= y row) (partial cell value) empty-cell) x y)))]
+    [view {:style {:border-style "solid"
+                   :border-top-width 1
+                   :border-left-width 1
+                   :border-color "#ccc"
+                   :align-items "flex-start"
+                   :flex-wrap "wrap"
+                   :flex-direction "row"
+                   :margin 10
+                   :width 42}}
+     (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
+
+(defmethod piece :next-to [{paths :clue/args}] [text (.stringify js/JSON (clj->js paths))])
+(defmethod piece :same-house [{paths :clue/args}] [text (.stringify js/JSON (clj->js paths))])
+(defmethod piece :in-house [{paths :clue/args}] [text (.stringify js/JSON (clj->js paths))])
+
 (defn root []
   (let [config [(list
                   {:puzzle/puzzle [:puzzle/clues :puzzle/solution]}
                   (merge (get difficulties "normal") {:size 4}))]]
-    (fetch-puzzle config))
+    (.then (fetch-puzzle config) (partial reset! state)))
   (fn []
     [view {:style {:align-items "center"
                    :background-color "#fff"
                    :flex 1
                    :justify-content "center"
                    :padding 20}}
-     [text "pants"]]))
+     (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
+       (doall (map (fn [clue] ^{:key clue}[piece clue]) clues)))
+     ]))
 
 (def app (reactify-component root))
