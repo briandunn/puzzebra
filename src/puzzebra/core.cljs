@@ -6,6 +6,19 @@
 
 (def text (adapt-react-class (.-Text ReactNative)))
 (def view (adapt-react-class (.-View ReactNative)))
+(def touchable-opacity (adapt-react-class (.-TouchableOpacity ReactNative)))
+
+(defn create-pan-responder [config] (.create (.-PanResponder ReactNative) (clj->js config)))
+
+(defn draggable []
+  (let [pos (atom {:translateX 0 :translateY 0})
+        pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
+                                             :onPanResponderMove (fn [e state]
+                                                                   (reset! pos {:translateX (.-dx state) :translateY (.-dy state)}))})]
+    (fn []
+      (into
+        [view (merge {:transform (map (fn [[k v]] {k v}) @pos)} (js->clj (.-panHandlers pan-responder)))]
+        (r/children (r/current-component))))))
 
 (def difficulties
   {"beginner"
@@ -135,7 +148,7 @@
          (let [[in-house other-clues] (partition-by #(= (:clue/type %) :in-house) (sort-by :clue/type clues))]
            [view
              [view
-              (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues ))]
+              (doall (map (fn [clue] ^{:key clue} [draggable [piece clue]]) other-clues ))]
              [board in-house size]]))])))
 
 (def app (reactify-component root))
