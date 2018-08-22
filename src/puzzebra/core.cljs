@@ -80,10 +80,14 @@
   [view {:style (merge cell-style {:background-color (row-color y)})}
    [text i]])
 
+(defn empty-cell []
+  [view {:style cell-style}])
+
+(defn row-range [args]
+  (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row))))
+
 (defmethod piece :left-of [{args :clue/args}]
-  (let [empty-cell (fn [x y] [view {:style cell-style}])
-        cells (for [y (let [[first-row last-row] (sort (map first args))]
-                        (range first-row (+ 1 last-row)))
+  (let [cells (for [y (row-range args)
                     x (range 2)]
                 (let [[row value] (nth args x [])]
                   (partial (if (= y row) (partial cell value) empty-cell) y)))]
@@ -91,23 +95,28 @@
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defmethod piece :same-house [{args :clue/args}]
-  (let [empty-cell (fn [y] [view {:style cell-style}])
-        cells (for [y (let [[first-row last-row] (sort (map first args))]
-                        (range first-row (+ 1 last-row)))]
+  (let [cells (for [y (row-range args) ]
                 (let [c (some (fn [[row val]] (and (= row y) val)) args)]
                   (partial (if c (partial cell c) empty-cell) y)))]
     [view {:style (clue-frame-style 1) }
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
-(defmethod piece :next-to [{paths :clue/args}] [text (.stringify js/JSON (clj->js paths))])
+(defmethod piece :next-to [{args :clue/args}]
+  (let [cells (for [y (row-range args)
+                    x (range 2)]
+                (let [[row value] (nth args x [])]
+                  (partial (if (= y row) (partial cell value) empty-cell) y)))]
+    [view {:style (clue-frame-style 2)}
+     (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defn board [in-house size]
   [view {:style (clue-frame-style size)}
    (for [y (range size) x (range size)]
-     (let [i (some (fn [[[clue-x clue-y] i]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))]
+     (let [i (some (fn [[[clue-y i] clue-x]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))
+           k (str x " " y)]
       (if i
-        ^{:key (str x " " y)}[cell i y]
-        ^{:key (str x " " y)}[view {:style cell-style}])))])
+        ^{:key k}[cell i y]
+        ^{:key k}[view {:style cell-style}])))])
 
 (defn root []
   (let [size 4
@@ -122,6 +131,7 @@
                      :justify-content "center"
                      :padding 20}}
        (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
+         (print clues)
          (let [[in-house other-clues] (partition-by #(= (:clue/type %) :in-house) (sort-by :clue/type clues))]
            [view
              [view
