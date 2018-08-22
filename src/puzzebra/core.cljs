@@ -11,14 +11,25 @@
 (defn create-pan-responder [config] (.create (.-PanResponder ReactNative) (clj->js config)))
 
 (defn draggable []
-  (let [pos (atom {:translateX 0 :translateY 0})
+  (let [pos (atom {:current [0 0] :start [0 0]})
+        get-delta (fn [state] (map (partial aget state) ["dx" "dy"]))
         pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
-                                             :onPanResponderMove (fn [e state]
-                                                                   (reset! pos {:translateX (.-dx state) :translateY (.-dy state)}))})]
+                                             :onPanResponderRelease (fn [_ state]
+                                                                      (swap! pos (fn [{start :start}]
+                                                                                   {:current [0 0]
+                                                                                    :start (mapv + start (get-delta state))})))
+                                             :onPanResponderMove (fn [_ state]
+                                                                   (swap! pos (fn [p]
+                                                                                (assoc p :current (get-delta state)))))})]
     (fn []
-      (into
-        [view (merge {:transform (map (fn [[k v]] {k v}) @pos)} (js->clj (.-panHandlers pan-responder)))]
-        (r/children (r/current-component))))))
+      (let [{:keys [current start]} @pos
+            [tx ty] (mapv + current start)]
+        (into
+          [view
+           (merge
+             {:transform [{:translateX tx} {:translateY ty}]}
+             (js->clj (.-panHandlers pan-responder)))]
+           (r/children (r/current-component)))))))
 
 (def difficulties
   {"beginner"
