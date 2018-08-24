@@ -7,29 +7,40 @@
 (def text (adapt-react-class (.-Text ReactNative)))
 (def view (adapt-react-class (.-View ReactNative)))
 (def touchable-opacity (adapt-react-class (.-TouchableOpacity ReactNative)))
+(def state (atom {}))
 
 (defn create-pan-responder [config] (.create (.-PanResponder ReactNative) (clj->js config)))
 
+(defn get-fields [fields js] (mapv (partial aget js) fields))
+(defn round-to-nearest [size value] (* size (.round js/Math (/ value size))))
+
 (defn draggable []
   (let [pos (atom {:current [0 0] :start [0 0]})
-        get-delta (fn [state] (map (partial aget state) ["dx" "dy"]))
+        get-delta (partial get-fields ["dx" "dy"])
+        {:keys [style key] } (r/props (r/current-component))
+        on-layout (fn [e] (print (.. e -nativeEvent -layout)))
         pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
-                                             :onPanResponderRelease (fn [_ state]
+                                             :onPanResponderRelease (fn [e pan-state]
+                                                                      (let [page-coords (get-fields ["pageX" "pageY"] (.-nativeEvent e))]
+                                                                        (print page-coords)
+                                                                        (swap! state update :positions assoc key page-coords))
                                                                       (swap! pos (fn [{start :start}]
                                                                                    {:current [0 0]
-                                                                                    :start (mapv + start (get-delta state))})))
-                                             :onPanResponderMove (fn [_ state]
+                                                                                    :start (map (partial round-to-nearest 21) (mapv + start (get-delta pan-state)))})))
+                                             :onPanResponderGrant (fn [e] (print (get-fields ["target" "locationX" "locationY"] (.-nativeEvent e))))
+                                             :onPanResponderMove (fn [_ pan-state]
                                                                    (swap! pos (fn [p]
-                                                                                (assoc p :current (get-delta state)))))})]
+                                                                                (assoc p :current (get-delta pan-state)))))})]
     (fn []
       (let [{:keys [current start]} @pos
             [tx ty] (mapv + current start)]
         (into
           [view
            (merge
-             {:transform [{:translateX tx} {:translateY ty}]}
+             {:transform [{:translateX tx} {:translateY ty}]
+              :style (merge style {})}
              (js->clj (.-panHandlers pan-responder)))]
-           (r/children (r/current-component)))))))
+          (r/children (r/current-component)))))))
 
 (def difficulties
   {"beginner"
@@ -76,18 +87,16 @@
       (.then #(.text %))
       (.then (partial t/read (t/reader :json))))))
 
-(def state (atom {}))
-
 (defn row-color [row-number] (nth ["#9ccc65" "#ffa726" "#fdd835" "#29b6f6"] row-number))
 
 (defmulti piece :clue/type)
 
 (def cell-style {:border-bottom-width 1
-                    :border-color "#ccc"
-                    :border-right-width 1
-                    :border-style "solid"
-                    :height 20
-                    :width 20})
+                 :border-color "#ccc"
+                 :border-right-width 1
+                 :border-style "solid"
+                 :height 20
+                 :width 20})
 
 (defn clue-frame-style [cells-wide]
   {:align-items "flex-start"
@@ -97,7 +106,7 @@
                    :border-top-width 1
                    :flex-direction "row"
                    :flex-wrap "wrap"
-                   :margin 10
+                   :margin 21
                    :width (* 21 cells-wide )})
 
 (defn cell [i y]
@@ -115,14 +124,14 @@
                     x (range 2)]
                 (let [[row value] (nth args x [])]
                   (partial (if (= y row) (partial cell value) empty-cell) y)))]
-    [view {:style (clue-frame-style 2)}
+    [draggable {:style (clue-frame-style 2)}
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defmethod piece :same-house [{args :clue/args}]
   (let [cells (for [y (row-range args) ]
                 (let [c (some (fn [[row val]] (and (= row y) val)) args)]
                   (partial (if c (partial cell c) empty-cell) y)))]
-    [view {:style (clue-frame-style 1) }
+    [draggable {:style (clue-frame-style 1) }
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defmethod piece :next-to [{args :clue/args}]
@@ -130,11 +139,11 @@
                     x (range 2)]
                 (let [[row value] (nth args x [])]
                   (partial (if (= y row) (partial cell value) empty-cell) y)))]
-    [view {:style (clue-frame-style 2)}
+    [draggable {:style (merge (clue-frame-style 2) {:background-color "#eee"})}
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defn board [in-house size]
-  [view {:style (clue-frame-style size)}
+  [view {:style (clue-frame-style size) }
    (for [y (range size) x (range size)]
      (let [i (some (fn [[[clue-y i] clue-x]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))
            k (str x " " y)]
@@ -149,17 +158,17 @@
                   (merge (get difficulties "normal") {:size size}))]]
     (.then (fetch-puzzle config) (partial reset! state))
     (fn []
-      [view {:style {:align-items "center"
+      [view {:style {
+                     :align-items "center"
                      :background-color "#fff"
+                     :border-style "solid"
+                     :border-width 1
+                     :border-color "yellow"
                      :flex 1
                      :justify-content "center"
-                     :padding 20}}
+                     }}
        (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
-         (print clues)
          (let [[in-house other-clues] (partition-by #(= (:clue/type %) :in-house) (sort-by :clue/type clues))]
-           [view
-             [view
-              (doall (map (fn [clue] ^{:key clue} [draggable [piece clue]]) other-clues ))]
-             [board in-house size]]))])))
+           (into [view] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues )) [board in-house size]))))])))
 
 (def app (reactify-component root))
