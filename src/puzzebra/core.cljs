@@ -35,12 +35,13 @@
 
 (defn collisions [positions]
   (set
-    (flatten
-      (for
-        [[clue-a box-a] positions
-         [clue-b box-b] positions
-         :while (and (not= box-a box-b) (colission? box-a box-b))]
-        [clue-a clue-b]))))
+    (doall
+      (flatten
+        (for
+          [[clue-a box-a] positions
+           [clue-b box-b] positions
+           :while (and (not= box-a box-b) (colission? box-a box-b))]
+          [clue-a clue-b])))))
 
 (defn draggable []
   (let [pos (atom {:current [0 0] :start [0 0]})
@@ -52,15 +53,13 @@
         get-delta (partial get-fields ["dx" "dy"])
         on-layout #(.measure
                      @ref
-                     (fn [x y width height page-x page-y]
+                     (fn [x y width height]
                        (swap! pos merge {:width width :height height})
                        (update-position! x y)))
         collision? (reaction (contains? (collisions (get @state :positions)) key))
         pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
                                              :onPanResponderRelease (fn [e pan-state]
-                                                                      (let [[x y] (get-fields ["pageX" "pageY"] (.-nativeEvent e))]
-                                                                        (update-position! x y))
-                                                                      (-> state (deref) (:positions) (vals) (print))
+                                                                      (.measure @ref update-position!)
                                                                       (swap! pos (fn [{start :start :as p}]
                                                                                    (merge p {:current [0 0]
                                                                                              :start (mapv + start (get-delta pan-state))}))))
