@@ -125,7 +125,7 @@
 
 (defmulti piece :clue/type)
 
-(def side-length 20)
+(def side-length 30)
 
 (def cell-style {:height side-length
                  :width side-length})
@@ -202,6 +202,13 @@
                      :justify-content "center"}}
        (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
          (let [[in-house other-clues] (partition-by #(= (:clue/type %) :in-house) (sort-by :clue/type clues))]
-           (into [view] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues)) [board in-house size]))))])))
+           (into [view {:style {
+                                 :width "100%"
+                                 :justify-content "center"
+                                 :align-items "center"
+                                 :background-color "#eee"
+                                 :flex-direction "row"
+                                 :flex-wrap "wrap"
+                                 }} ] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues)) [board in-house size]))))])))
 
 (def app (reactify-component root))
