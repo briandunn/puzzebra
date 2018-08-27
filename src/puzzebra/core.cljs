@@ -40,7 +40,7 @@
 (defn draggable []
   (let [pos (atom {:current [0 0] :start [0 0]})
         ref (atom nil)
-        {:keys [style key]} (r/props (r/current-component))
+        {:keys [style key on-press]} (r/props (r/current-component))
         update-position! (fn [x y]
                            (let [dimensions (select-keys @pos [:width :height])]
                              (swap! state update :positions assoc key (merge {:x x :y y} dimensions))))
@@ -50,13 +50,16 @@
                      (fn [x y width height]
                        (swap! pos merge {:width width :height height})
                        (update-position! x y)))
-        collision? (reaction (contains? (collisions (get @state :positions))  key))
+        collision? (reaction (contains? (collisions (get @state :positions)) key))
         pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
                                              :onPanResponderRelease (fn [e pan-state]
+                                                                      (let [delta (get-delta pan-state)]
+                                                                        (when (and on-press (every? (partial > 0.1) delta))
+                                                                          (on-press e))
                                                                       (.measure @ref update-position!)
                                                                       (swap! pos (fn [{start :start :as p}]
                                                                                    (merge p {:current [0 0]
-                                                                                             :start (mapv + start (get-delta pan-state))}))))
+                                                                                             :start (mapv + start delta)})))))
                                              :onPanResponderMove (fn [_ pan-state]
                                                                    (swap! pos assoc :current (get-delta pan-state)))})]
     (fn []
@@ -68,7 +71,8 @@
              {:transform [{:translateX tx} {:translateY ty}]
               :on-layout on-layout
               :ref (partial reset! ref)
-              :style (merge style {:background-color (if @collision? "red" "white")})}
+              :style (merge style {:z-index (if (= 0 (get-in @pos [:current 0])) 1 2)
+                                   :border-color (if @collision? "red" "white")})}
              (js->clj (.-panHandlers pan-responder)))]
           (r/children (r/current-component)))))))
 
@@ -162,12 +166,16 @@
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defmethod piece :next-to [{args :clue/args :as key}]
-  (let [cells (for [y (row-range args)
-                    x (range 2)]
-                (let [[row value] (nth args x [])]
-                  (partial (if (= y row) (partial cell value) empty-cell) y)))]
-    [draggable {:key key :style (merge (clue-frame-style 2) {:background-color "#eee"})}
-     (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
+  (let [flip? (atom false)
+        on-press #(swap! flip? not)]
+    (fn []
+      [draggable {:key key :on-press on-press :style (merge (clue-frame-style 2) {:background-color "#eee"})}
+       (doall (map (fn [component i] ^{:key i}[component])
+                   (for [y (row-range args)
+                         x (range 2)]
+                     (let [[row value] (nth (if @flip? (reverse args) args) x [])]
+                       (partial (if (= y row) (partial cell value) empty-cell) y)))
+                   (range)))])))
 
 (defn board [in-house size]
   [view {:style (clue-frame-style size) }
