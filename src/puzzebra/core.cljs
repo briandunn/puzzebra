@@ -39,26 +39,33 @@
       (for
         [[clue-a box-a] positions
          [clue-b box-b] positions
-         :while (colission? box-a box-b)]
+         :while (and (not= box-a box-b) (colission? box-a box-b))]
         [clue-a clue-b]))))
 
 (defn draggable []
   (let [pos (atom {:current [0 0] :start [0 0]})
+        ref (atom nil)
+        {:keys [style key]} (r/props (r/current-component))
+        update-position! (fn [x y]
+                           (let [dimensions (select-keys @pos [:width :height])]
+                             (swap! state update :positions assoc key (merge {:x x :y y} dimensions))))
         get-delta (partial get-fields ["dx" "dy"])
-        on-layout #(swap! pos merge (zipmap [:width :height] (get-fields ["width" "height"] (.. % -nativeEvent -layout))))
-        {:keys [style key] } (r/props (r/current-component))
+        on-layout #(.measure
+                     @ref
+                     (fn [x y width height page-x page-y]
+                       (swap! pos merge {:width width :height height})
+                       (update-position! x y)))
         collision? (reaction (contains? (collisions (get @state :positions)) key))
         pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
                                              :onPanResponderRelease (fn [e pan-state]
-                                                                      (let [[x y] (get-fields ["pageX" "pageY"] (.-nativeEvent e))
-                                                                            dimensions (select-keys @pos [:width :height])]
-                                                                        (swap! state update :positions assoc key (merge {:x x :y y} dimensions)))
+                                                                      (let [[x y] (get-fields ["pageX" "pageY"] (.-nativeEvent e))]
+                                                                        (update-position! x y))
+                                                                      (-> state (deref) (:positions) (vals) (print))
                                                                       (swap! pos (fn [{start :start :as p}]
                                                                                    (merge p {:current [0 0]
                                                                                              :start (mapv + start (get-delta pan-state))}))))
                                              :onPanResponderMove (fn [_ pan-state]
-                                                                   (swap! pos (fn [p]
-                                                                                (assoc p :current (get-delta pan-state)))))})]
+                                                                   (swap! pos assoc :current (get-delta pan-state)))})]
     (fn []
       (let [{:keys [current start]} @pos
             [tx ty] (mapv + current start)]
@@ -67,6 +74,7 @@
            (merge
              {:transform [{:translateX tx} {:translateY ty}]
               :on-layout on-layout
+              :ref (partial reset! ref)
               :style (merge style {:background-color (if @collision? "red" "white")})}
              (js->clj (.-panHandlers pan-responder)))]
           (r/children (r/current-component)))))))
