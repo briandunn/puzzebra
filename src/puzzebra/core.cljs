@@ -19,14 +19,9 @@
 (defn row-range [args]
   (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row))))
 
-; (rect1.x < rect2.x + rect2.width &&
-;    rect1.x + rect1.width > rect2.x &&
-;    rect1.y < rect2.y + rect2.height &&
-;    rect1.y + rect1.height > rect2.y)
-
 (defn p [x] (print x) x)
 
-(defn colission? [{:keys [x y width height] :as z} item]
+(defn colission? [{:keys [x y width height]} item]
   (and
     (< (:x item) (+ x width))
     (> (+ (:width item) (:x item)) x)
@@ -35,13 +30,12 @@
 
 (defn collisions [positions]
   (set
-    (doall
-      (flatten
-        (for
-          [[clue-a box-a] positions
-           [clue-b box-b] positions
-           :while (and (not= box-a box-b) (colission? box-a box-b))]
-          [clue-a clue-b])))))
+    (flatten
+      (for
+        [[clue-a box-a] positions
+         [clue-b box-b] positions
+         :when (and (not= box-a box-b) (colission? box-a box-b))]
+        [clue-a clue-b]))))
 
 (defn draggable []
   (let [pos (atom {:current [0 0] :start [0 0]})
@@ -56,7 +50,7 @@
                      (fn [x y width height]
                        (swap! pos merge {:width width :height height})
                        (update-position! x y)))
-        collision? (reaction (contains? (collisions (get @state :positions)) key))
+        collision? (reaction (contains? (collisions (get @state :positions))  key))
         pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
                                              :onPanResponderRelease (fn [e pan-state]
                                                                       (.measure @ref update-position!)
@@ -191,17 +185,15 @@
                   (merge (get difficulties "normal") {:size size}))]]
     (.then (fetch-puzzle config) (partial reset! state))
     (fn []
-      [view {:style {
-                     :align-items "center"
+      [view {:style {:align-items "center"
                      :background-color "#fff"
                      :border-style "solid"
                      :border-width 1
                      :border-color "yellow"
                      :flex 1
-                     :justify-content "center"
-                     }}
+                     :justify-content "center"}}
        (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
          (let [[in-house other-clues] (partition-by #(= (:clue/type %) :in-house) (sort-by :clue/type clues))]
-           (into [view] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues )) [board in-house size]))))])))
+           (into [view] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues)) [board in-house size]))))])))
 
 (def app (reactify-component root))
