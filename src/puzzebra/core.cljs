@@ -54,7 +54,7 @@
         pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
                                              :onPanResponderRelease (fn [e pan-state]
                                                                       (let [delta (get-delta pan-state)]
-                                                                        (when (and on-press (every? (partial > 0.1) delta))
+                                                                        (when (and on-press (every? zero? delta))
                                                                           (on-press e))
                                                                       (.measure @ref update-position!)
                                                                       (swap! pos (fn [{start :start :as p}]
@@ -125,27 +125,25 @@
 
 (defmulti piece :clue/type)
 
-(def cell-style {:border-bottom-width 1
-                 :border-color "#ccc"
-                 :border-right-width 1
-                 :border-style "solid"
-                 :height 20
-                 :width 20})
+(def side-length 20)
+
+(def cell-style {:height side-length
+                 :width side-length})
 
 (defn clue-frame-style [cells-wide]
   {:align-items "flex-start"
-   :border-color "#ccc"
-   :border-left-width 1
-   :border-style "solid"
-   :border-top-width 1
    :flex-direction "row"
    :flex-wrap "wrap"
-   :margin 11
-   :width (* 21 cells-wide )})
+   :border-color "#ccc"
+   :border-style "solid"
+   :border-width 1
+   :overflow "hidden"
+   :margin 10
+   :width (* (+ 1 side-length) cells-wide)})
 
 (defn cell [i y]
-  [view {:style (merge cell-style {:background-color (row-color y)})}
-   [text i]])
+  [view {:style (merge cell-style {:background-color (row-color y) :justify-content "center"})}
+   [text {:style {:text-align "center"}} i]])
 
 (defn empty-cell []
   [view {:style cell-style}])
@@ -169,7 +167,9 @@
   (let [flip? (atom false)
         on-press #(swap! flip? not)]
     (fn []
-      [draggable {:key key :on-press on-press :style (merge (clue-frame-style 2) {:background-color "#eee"})}
+      [draggable {:key key
+                  :on-press on-press
+                  :style (merge (clue-frame-style 2) {:border-radius 10})}
        (doall (map (fn [component i] ^{:key i}[component])
                    (for [y (row-range args)
                          x (range 2)]
