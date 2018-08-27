@@ -2,7 +2,8 @@
   (:require
     ["react-native" :as ReactNative]
     [cognitect.transit :as t]
-    [reagent.core :as r :refer [atom adapt-react-class reactify-component]]))
+    [reagent.core :as r :refer [atom adapt-react-class reactify-component]]
+    [reagent.ratom :refer [reaction]]))
 
 (def text (adapt-react-class (.-Text ReactNative)))
 (def view (adapt-react-class (.-View ReactNative)))
@@ -12,22 +13,49 @@
 (defn create-pan-responder [config] (.create (.-PanResponder ReactNative) (clj->js config)))
 
 (defn get-fields [fields js] (mapv (partial aget js) fields))
+
 (defn round-to-nearest [size value] (* size (.round js/Math (/ value size))))
+
+(defn row-range [args]
+  (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row))))
+
+; (rect1.x < rect2.x + rect2.width &&
+;    rect1.x + rect1.width > rect2.x &&
+;    rect1.y < rect2.y + rect2.height &&
+;    rect1.y + rect1.height > rect2.y)
+
+(defn p [x] (print x) x)
+
+(defn colission? [{:keys [x y width height] :as z} item]
+  (and
+    (< (:x item) (+ x width))
+    (> (+ (:width item) (:x item)) x)
+    (< (:y item) (+ y height))
+    (> (+ (:height item) (:y item)) y)))
+
+(defn collisions [positions]
+  (set
+    (flatten
+      (for
+        [[clue-a box-a] positions
+         [clue-b box-b] positions
+         :while (colission? box-a box-b)]
+        [clue-a clue-b]))))
 
 (defn draggable []
   (let [pos (atom {:current [0 0] :start [0 0]})
         get-delta (partial get-fields ["dx" "dy"])
+        on-layout #(swap! pos merge (zipmap [:width :height] (get-fields ["width" "height"] (.. % -nativeEvent -layout))))
         {:keys [style key] } (r/props (r/current-component))
-        on-layout (fn [e] (print (.. e -nativeEvent -layout)))
+        collision? (reaction (contains? (collisions (get @state :positions)) key))
         pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
                                              :onPanResponderRelease (fn [e pan-state]
-                                                                      (let [page-coords (get-fields ["pageX" "pageY"] (.-nativeEvent e))]
-                                                                        (print page-coords)
-                                                                        (swap! state update :positions assoc key page-coords))
-                                                                      (swap! pos (fn [{start :start}]
-                                                                                   {:current [0 0]
-                                                                                    :start (map (partial round-to-nearest 21) (mapv + start (get-delta pan-state)))})))
-                                             :onPanResponderGrant (fn [e] (print (get-fields ["target" "locationX" "locationY"] (.-nativeEvent e))))
+                                                                      (let [[x y] (get-fields ["pageX" "pageY"] (.-nativeEvent e))
+                                                                            dimensions (select-keys @pos [:width :height])]
+                                                                        (swap! state update :positions assoc key (merge {:x x :y y} dimensions)))
+                                                                      (swap! pos (fn [{start :start :as p}]
+                                                                                   (merge p {:current [0 0]
+                                                                                             :start (mapv + start (get-delta pan-state))}))))
                                              :onPanResponderMove (fn [_ pan-state]
                                                                    (swap! pos (fn [p]
                                                                                 (assoc p :current (get-delta pan-state)))))})]
@@ -38,7 +66,8 @@
           [view
            (merge
              {:transform [{:translateX tx} {:translateY ty}]
-              :style (merge style {})}
+              :on-layout on-layout
+              :style (merge style {:background-color (if @collision? "red" "white")})}
              (js->clj (.-panHandlers pan-responder)))]
           (r/children (r/current-component)))))))
 
@@ -100,14 +129,14 @@
 
 (defn clue-frame-style [cells-wide]
   {:align-items "flex-start"
-                   :border-color "#ccc"
-                   :border-left-width 1
-                   :border-style "solid"
-                   :border-top-width 1
-                   :flex-direction "row"
-                   :flex-wrap "wrap"
-                   :margin 21
-                   :width (* 21 cells-wide )})
+   :border-color "#ccc"
+   :border-left-width 1
+   :border-style "solid"
+   :border-top-width 1
+   :flex-direction "row"
+   :flex-wrap "wrap"
+   :margin 11
+   :width (* 21 cells-wide )})
 
 (defn cell [i y]
   [view {:style (merge cell-style {:background-color (row-color y)})}
@@ -116,30 +145,27 @@
 (defn empty-cell []
   [view {:style cell-style}])
 
-(defn row-range [args]
-  (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row))))
-
-(defmethod piece :left-of [{args :clue/args}]
+(defmethod piece :left-of [{args :clue/args :as key}]
   (let [cells (for [y (row-range args)
                     x (range 2)]
                 (let [[row value] (nth args x [])]
                   (partial (if (= y row) (partial cell value) empty-cell) y)))]
-    [draggable {:style (clue-frame-style 2)}
+    [draggable {:key key :style (clue-frame-style 2)}
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
-(defmethod piece :same-house [{args :clue/args}]
+(defmethod piece :same-house [{args :clue/args :as key}]
   (let [cells (for [y (row-range args) ]
                 (let [c (some (fn [[row val]] (and (= row y) val)) args)]
                   (partial (if c (partial cell c) empty-cell) y)))]
-    [draggable {:style (clue-frame-style 1) }
+    [draggable {:key key :style (clue-frame-style 1) }
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
-(defmethod piece :next-to [{args :clue/args}]
+(defmethod piece :next-to [{args :clue/args :as key}]
   (let [cells (for [y (row-range args)
                     x (range 2)]
                 (let [[row value] (nth args x [])]
                   (partial (if (= y row) (partial cell value) empty-cell) y)))]
-    [draggable {:style (merge (clue-frame-style 2) {:background-color "#eee"})}
+    [draggable {:key key :style (merge (clue-frame-style 2) {:background-color "#eee"})}
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defn board [in-house size]
@@ -147,9 +173,9 @@
    (for [y (range size) x (range size)]
      (let [i (some (fn [[[clue-y i] clue-x]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))
            k (str x " " y)]
-      (if i
-        ^{:key k}[cell i y]
-        ^{:key k}[view {:style cell-style}])))])
+       (if i
+         ^{:key k}[cell i y]
+         ^{:key k}[view {:style cell-style}])))])
 
 (defn root []
   (let [size 4
