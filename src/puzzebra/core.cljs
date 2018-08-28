@@ -1,5 +1,6 @@
 (ns puzzebra.core
   (:require
+    [clojure.pprint :refer [pprint]]
     ["react-native" :as ReactNative]
     [cognitect.transit :as t]
     [reagent.core :as r :refer [atom adapt-react-class reactify-component]]
@@ -17,7 +18,7 @@
 (defn round-to-nearest [size value] (* size (.round js/Math (/ value size))))
 
 (defn row-range [args]
-  (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row))))
+  (let [[first-row last-row] (sort (map first args))] (range first-row (+ 2 last-row))))
 
 (defn p [x] (print x) x)
 
@@ -37,6 +38,20 @@
          :when (and (not= box-a box-b) (colission? box-a box-b))]
         [clue-a clue-b]))))
 
+(defn keywordize-map [m]
+	(reduce (fn [acc [k v]] (assoc acc (keyword k) v)) {} m))
+
+(defn snap [board-rect cur-pos]
+  [0 0]
+  )
+
+(defn maybe-snap [abs-pos  board-rect]
+  (let [side (get-in @state [:puzzle/puzzle :puzzle/grid :puzzle/width])
+        ]
+    (if (colission? abs-pos board-rect)
+      (do (prn "COL") (snap board-rect cur))
+      [(:x abs-pos) (:y abs-pos)])))
+
 (defn draggable []
   (let [pos (atom {:current [0 0] :start [0 0]})
         ref (atom nil)
@@ -48,7 +63,8 @@
         on-layout #(.measure
                      @ref
                      (fn [x y width height]
-                       (swap! pos merge {:width width :height height})
+                       (print "layout!")
+                       (swap! pos merge {:start [x y] :width width :height height})
                        (update-position! x y)))
         collision? (reaction (contains? (collisions (get @state :positions)) key))
         pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
@@ -56,22 +72,27 @@
                                                                       (let [delta (get-delta pan-state)]
                                                                         (when (and on-press (every? zero? delta))
                                                                           (on-press e))
-                                                                      (.measure @ref update-position!)
-                                                                      (swap! pos (fn [{start :start :as p}]
-                                                                                   (merge p {:current [0 0]
-                                                                                             :start (mapv + start delta)})))))
+                                                                        (.measure @ref (fn [& rect-vals]
+                                                                                         (apply update-position! (take 2 rect-vals))
+                                                                                         (swap! pos (fn [{start :start :as p}]
+                                                                                                      (merge p {:current [0 0]
+                                                                                                                :start (maybe-snap (zipmap [:x :y :width :height] rect-vals) (:board-rect @state)) })))
+                                                                                         ))
+                                                                        ))
                                              :onPanResponderMove (fn [_ pan-state]
                                                                    (swap! pos assoc :current (get-delta pan-state)))})]
     (fn []
       (let [{:keys [current start]} @pos
-            [tx ty] (mapv + current start)]
+            [x y] (mapv + current start)]
         (into
           [view
            (merge
-             {:transform [{:translateX tx} {:translateY ty}]
+             {
               :on-layout on-layout
               :ref (partial reset! ref)
               :style (merge style {:z-index (if (= 0 (get-in @pos [:current 0])) 1 2)
+                                   :left x
+                                   :top y
                                    :border-color (if @collision? "red" "white")})}
              (js->clj (.-panHandlers pan-responder)))]
           (r/children (r/current-component)))))))
@@ -178,7 +199,13 @@
                    (range)))])))
 
 (defn board [in-house size]
-  [view {:style (clue-frame-style size) }
+  [view
+   {:style (clue-frame-style size)
+    :on-layout (fn [e]
+                 (swap! state assoc :board-rect (-> (.. e -nativeEvent -layout)
+                                                    js->clj
+                                                    keywordize-map)))}
+
    (for [y (range size) x (range size)]
      (let [i (some (fn [[[clue-y i] clue-x]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))
            k (str x " " y)]
