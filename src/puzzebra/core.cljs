@@ -47,7 +47,7 @@
     (< (:y item) (+ y height))
     (> (+ (:height item) (:y item)) y)))
 
-(defn collisions [positions]
+(defn collisions* [positions]
   (set
     (flatten
       (for
@@ -56,13 +56,14 @@
          :when (and (not= box-a box-b) (colission? box-a box-b))]
         [clue-a clue-b]))))
 
+(def collisions (reaction (collisions* (get @state :positions))))
+
 (defn draggable []
   (let [pos (atom {:current [0 0] :start [0 0]})
         ref (atom nil)
         {:keys [style key on-press]} (r/props (r/current-component))
         update-position! (partial swap! state update :positions assoc key)
         layout (on-layout #(->> % (swap! pos merge) update-position!))
-        collision? (reaction (contains? (collisions (get @state :positions)) key))
         pan-handlers (create-pan-responder
                        {:on-start-should-set (constantly true)
                         :on-release (fn [delta]
@@ -75,7 +76,9 @@
                         :on-move (partial swap! pos assoc :current)})]
     (fn []
       (let [{:keys [current start]} @pos
-            [tx ty] (mapv + current start)]
+            [tx ty] (mapv + current start)
+            collision? (contains? @collisions key)
+            ]
         (into
           [view
            (merge
@@ -84,7 +87,7 @@
               :on-layout layout
               :ref (partial reset! ref)
               :style (merge style {:z-index (if (= 0 (get-in @pos [:current 0])) 1 2)
-                                   :border-color (if @collision? "red" "white")})})]
+                                   :border-color (if collision? "red" "white")})})]
           (r/children (r/current-component)))))))
 
 (def difficulties
