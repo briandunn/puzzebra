@@ -1,6 +1,7 @@
 (ns puzzebra.core
   (:require
     ["react-native" :as ReactNative]
+    [clojure.spec.alpha :as s]
     [cognitect.transit :as t]
     [reagent.core :as r :refer [atom adapt-react-class reactify-component]]
     [reagent.ratom :refer [reaction]]))
@@ -60,19 +61,24 @@
 
 (defn draggable []
   (let [pos (atom {:current [0 0] :start [0 0]})
-        ref (atom nil)
         {:keys [style key on-press]} (r/props (r/current-component))
         update-position! (partial swap! state update :positions assoc key)
-        layout (on-layout #(->> % (swap! pos merge) update-position!))
+        layout (on-layout
+                 (fn [rect]
+                   (swap! pos assoc :initial-rect rect)
+                   (update-position! rect)))
         pan-handlers (create-pan-responder
                        {:on-start-should-set (constantly true)
                         :on-release (fn [delta]
                                       (when (and on-press (every? zero? delta))
                                         (on-press))
-                                      (measure @ref update-position!)
                                       (swap! pos (fn [{start :start :as p}]
                                                    (merge p {:current [0 0]
-                                                             :start (mapv + start delta)}))))
+                                                             :start (mapv + start delta)})))
+                                      (let [{{initial-x :x initial-y :y :as initial-rect} :initial-rect [start-x start-y] :start} @pos
+                                            x (+ initial-x start-x)
+                                            y (+ initial-y start-y)]
+                                        (update-position! (merge initial-rect {:x x :y y}))))
                         :on-move (partial swap! pos assoc :current)})]
     (fn []
       (let [{:keys [current start]} @pos
@@ -85,7 +91,6 @@
              pan-handlers
              {:transform [{:translateX tx} {:translateY ty}]
               :on-layout layout
-              :ref (partial reset! ref)
               :style (merge style {:z-index (if (= 0 (get-in @pos [:current 0])) 1 2)
                                    :border-color (if collision? "red" "white")})})]
           (r/children (r/current-component)))))))
