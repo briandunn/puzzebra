@@ -10,16 +10,35 @@
 (def touchable-opacity (adapt-react-class (.-TouchableOpacity ReactNative)))
 (def state (atom {}))
 
-(defn create-pan-responder [config] (.create (.-PanResponder ReactNative) (clj->js config)))
+(defn p [x] (print x) x)
 
 (defn get-fields [fields js] (mapv (partial aget js) fields))
 
+(defn create-pan-responder [{:keys [on-release on-move on-start-should-set]}]
+  (let [call-with-delta #(fn [_ state] (% (get-fields ["dx" "dy"] state)))]
+    (js->clj
+      (.-panHandlers
+        (.create
+          (.-PanResponder ReactNative)
+          (clj->js {:onStartShouldSetPanResponder on-start-should-set
+                    :onPanResponderRelease (call-with-delta on-release)
+                    :onPanResponderMove (call-with-delta on-move)}))))))
+
 (defn round-to-nearest [size value] (* size (.round js/Math (/ value size))))
+
+(defn measure [ref callback]
+  (.measure ref (fn [& args]
+                  (callback (zipmap [:x :y :width :height :page-x :page-y] args)))))
+
+(defn on-layout [callback]
+  #(->>
+     (.. % -nativeEvent -layout)
+     (get-fields ["x" "y" "width" "height"])
+     (zipmap [:x :y :width :height])
+     callback))
 
 (defn row-range [args]
   (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row))))
-
-(defn p [x] (print x) x)
 
 (defn colission? [{:keys [x y width height]} item]
   (and
@@ -41,39 +60,31 @@
   (let [pos (atom {:current [0 0] :start [0 0]})
         ref (atom nil)
         {:keys [style key on-press]} (r/props (r/current-component))
-        update-position! (fn [x y]
-                           (let [dimensions (select-keys @pos [:width :height])]
-                             (swap! state update :positions assoc key (merge {:x x :y y} dimensions))))
-        get-delta (partial get-fields ["dx" "dy"])
-        on-layout #(.measure
-                     @ref
-                     (fn [x y width height]
-                       (swap! pos merge {:width width :height height})
-                       (update-position! x y)))
+        update-position! (partial swap! state update :positions assoc key)
+        layout (on-layout #(->> % (swap! pos merge) update-position!))
         collision? (reaction (contains? (collisions (get @state :positions)) key))
-        pan-responder (create-pan-responder {:onStartShouldSetPanResponder (constantly true)
-                                             :onPanResponderRelease (fn [e pan-state]
-                                                                      (let [delta (get-delta pan-state)]
-                                                                        (when (and on-press (every? zero? delta))
-                                                                          (on-press e))
-                                                                      (.measure @ref update-position!)
-                                                                      (swap! pos (fn [{start :start :as p}]
-                                                                                   (merge p {:current [0 0]
-                                                                                             :start (mapv + start delta)})))))
-                                             :onPanResponderMove (fn [_ pan-state]
-                                                                   (swap! pos assoc :current (get-delta pan-state)))})]
+        pan-handlers (create-pan-responder
+                       {:on-start-should-set (constantly true)
+                        :on-release (fn [delta]
+                                      (when (and on-press (every? zero? delta))
+                                        (on-press))
+                                      (measure @ref update-position!)
+                                      (swap! pos (fn [{start :start :as p}]
+                                                   (merge p {:current [0 0]
+                                                             :start (mapv + start delta)}))))
+                        :on-move (partial swap! pos assoc :current)})]
     (fn []
       (let [{:keys [current start]} @pos
             [tx ty] (mapv + current start)]
         (into
           [view
            (merge
+             pan-handlers
              {:transform [{:translateX tx} {:translateY ty}]
-              :on-layout on-layout
+              :on-layout layout
               :ref (partial reset! ref)
               :style (merge style {:z-index (if (= 0 (get-in @pos [:current 0])) 1 2)
-                                   :border-color (if @collision? "red" "white")})}
-             (js->clj (.-panHandlers pan-responder)))]
+                                   :border-color (if @collision? "red" "white")})})]
           (r/children (r/current-component)))))))
 
 (def difficulties
@@ -178,13 +189,16 @@
                    (range)))])))
 
 (defn board [in-house size]
-  [view {:style (clue-frame-style size) }
-   (for [y (range size) x (range size)]
-     (let [i (some (fn [[[clue-y i] clue-x]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))
-           k (str x " " y)]
-       (if i
-         ^{:key k}[cell i y]
-         ^{:key k}[view {:style cell-style}])))])
+  (let []
+    (fn []
+      [view {:style (clue-frame-style size)
+             :on-layout (on-layout (partial swap! state assoc :board-rect))}
+       (for [y (range size) x (range size)]
+         (let [i (some (fn [[[clue-y i] clue-x]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))
+               k (str x " " y)]
+           (if i
+             ^{:key k}[cell i y]
+             ^{:key k}[view {:style cell-style}])))])))
 
 (defn root []
   (let [size 4
@@ -203,12 +217,12 @@
        (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
          (let [[in-house other-clues] (partition-by #(= (:clue/type %) :in-house) (sort-by :clue/type clues))]
            (into [view {:style {
-                                 :width "100%"
-                                 :justify-content "center"
-                                 :align-items "center"
-                                 :background-color "#eee"
-                                 :flex-direction "row"
-                                 :flex-wrap "wrap"
-                                 }} ] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues)) [board in-house size]))))])))
+                                :width "100%"
+                                :justify-content "center"
+                                :align-items "center"
+                                :background-color "#eee"
+                                :flex-direction "row"
+                                :flex-wrap "wrap"
+                                }} ] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues)) [board in-house size]))))])))
 
 (def app (reactify-component root))
