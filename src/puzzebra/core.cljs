@@ -3,8 +3,8 @@
     ["react-native" :as ReactNative]
     [clojure.spec.alpha :as s]
     [cognitect.transit :as t]
-    [reagent.core :as r :refer [atom adapt-react-class reactify-component]]
-    [reagent.ratom :refer [reaction]]))
+    [reagent.core :as r :refer [adapt-react-class reactify-component]]
+    [reagent.ratom :refer [reaction cursor atom]]))
 
 (def text (adapt-react-class (.-Text ReactNative)))
 (def view (adapt-react-class (.-View ReactNative)))
@@ -15,15 +15,17 @@
 
 (defn get-fields [fields js] (mapv (partial aget js) fields))
 
-(defn create-pan-responder [{:keys [on-release on-move on-start-should-set]}]
-  (let [call-with-delta #(fn [_ state] (% (get-fields ["dx" "dy"] state)))]
+(defn create-pan-responder [config]
+  (let [call-with-delta #(fn [_ state] (% (get-fields ["dx" "dy"] state)))
+        key-names {:on-start-should-set :onStartShouldSetPanResponder
+                   :on-release :onPanResponderRelease
+                   :on-grant :onPanResponderGrant
+                   :on-move :onPanResponderMove}]
     (js->clj
       (.-panHandlers
         (.create
           (.-PanResponder ReactNative)
-          (clj->js {:onStartShouldSetPanResponder on-start-should-set
-                    :onPanResponderRelease (call-with-delta on-release)
-                    :onPanResponderMove (call-with-delta on-move)}))))))
+          (clj->js (reduce (fn [acc [k v]] (assoc acc (k key-names) (call-with-delta v))) {} config)))))))
 
 (defn round-to-nearest [size value] (* size (.round js/Math (/ value size))))
 
@@ -59,40 +61,41 @@
 
 (def collisions (reaction (collisions* (get @state :positions))))
 
+(defn rect->pt [rect] [(get rect :x 0) (get rect :y 0)])
+
 (defn draggable []
-  (let [pos (atom {:current [0 0] :start [0 0]})
+  (let [layout-pt (atom [0 0])
+        drag-start-pt (atom [0 0])
         {:keys [style key on-press]} (r/props (r/current-component))
-        update-position! (partial swap! state update :positions assoc key)
-        layout (on-layout
-                 (fn [rect]
-                   (swap! pos assoc :initial-rect rect)
-                   (update-position! rect)))
+        position-rect (cursor state [:positions key])
+        position-pt (reaction (rect->pt @position-rect))
+        translation (reaction (mapv - @position-pt @layout-pt))
+        apply-delta #(swap!
+                       state
+                       update-in
+                       [:positions key]
+                       merge
+                       (zipmap [:x :y] (mapv + @drag-start-pt %)))
+        layout (on-layout (fn [rect]
+                            (reset! layout-pt (rect->pt rect))
+                            (swap! state update :positions assoc key rect)))
         pan-handlers (create-pan-responder
                        {:on-start-should-set (constantly true)
+                        :on-grant #(reset! drag-start-pt @position-pt)
                         :on-release (fn [delta]
                                       (when (and on-press (every? zero? delta))
-                                        (on-press))
-                                      (swap! pos (fn [{start :start :as p}]
-                                                   (merge p {:current [0 0]
-                                                             :start (mapv + start delta)})))
-                                      (let [{{initial-x :x initial-y :y :as initial-rect} :initial-rect [start-x start-y] :start} @pos
-                                            x (+ initial-x start-x)
-                                            y (+ initial-y start-y)]
-                                        (update-position! (merge initial-rect {:x x :y y}))))
-                        :on-move (partial swap! pos assoc :current)})]
+                                        (on-press)))
+                        :on-move apply-delta})]
     (fn []
-      (let [{:keys [current start]} @pos
-            [tx ty] (mapv + current start)
-            collision? (contains? @collisions key)
-            ]
+      (let [[tx ty] @translation
+            collision? (contains? @collisions key)]
         (into
           [view
            (merge
              pan-handlers
              {:transform [{:translateX tx} {:translateY ty}]
               :on-layout layout
-              :style (merge style {:z-index (if (= 0 (get-in @pos [:current 0])) 1 2)
-                                   :border-color (if collision? "red" "white")})})]
+              :style (merge style {:border-color (if collision? "red" "white")})})]
           (r/children (r/current-component)))))))
 
 (def difficulties
