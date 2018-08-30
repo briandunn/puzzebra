@@ -9,7 +9,9 @@
 (def text (adapt-react-class (.-Text ReactNative)))
 (def view (adapt-react-class (.-View ReactNative)))
 (def touchable-opacity (adapt-react-class (.-TouchableOpacity ReactNative)))
+
 (def state (atom {}))
+(def side-length 30)
 
 (defn p [x] (print x) x)
 
@@ -43,7 +45,7 @@
 (defn row-range [args]
   (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row))))
 
-(defn colission? [{:keys [x y width height]} item]
+(defn collision? [{:keys [x y width height]} item]
   (and
     (< (:x item) (+ x width))
     (> (+ (:width item) (:x item)) x)
@@ -56,12 +58,29 @@
       (for
         [[clue-a box-a] positions
          [clue-b box-b] positions
-         :when (and (not= box-a box-b) (colission? box-a box-b))]
+         :when (and (not= box-a box-b) (collision? box-a box-b))]
         [clue-a clue-b]))))
 
 (def collisions (reaction (collisions* (get @state :positions))))
 
 (defn rect->pt [rect] [(get rect :x 0) (get rect :y 0)])
+
+(defn snap-pt [rect]
+  (let [{board-rect :board-rect {{size :puzzle/width} :puzzle/grid} :puzzle/puzzle} @state
+        [board-pt rect-pt] (map rect->pt [board-rect rect])
+        round (partial round-to-nearest side-length)]
+    (if
+      (collision? board-rect rect)
+      (mapv + board-pt (map round (map - rect-pt board-pt)))
+      rect-pt)))
+
+(defn set-position-pt! [clue pt]
+  (swap!
+    state
+    update-in
+    [:positions clue]
+    merge
+    (zipmap [:x :y] pt)))
 
 (defn draggable []
   (let [layout-pt (atom [0 0])
@@ -70,12 +89,8 @@
         position-rect (cursor state [:positions key])
         position-pt (reaction (rect->pt @position-rect))
         translation (reaction (mapv - @position-pt @layout-pt))
-        apply-delta #(swap!
-                       state
-                       update-in
-                       [:positions key]
-                       merge
-                       (zipmap [:x :y] (mapv + @drag-start-pt %)))
+        set-position-pt! (partial set-position-pt! key)
+        apply-delta #(set-position-pt! (mapv + @drag-start-pt %))
         layout (on-layout (fn [rect]
                             (reset! layout-pt (rect->pt rect))
                             (swap! state update :positions assoc key rect)))
@@ -83,8 +98,9 @@
                        {:on-start-should-set (constantly true)
                         :on-grant #(reset! drag-start-pt @position-pt)
                         :on-release (fn [delta]
-                                      (when (and on-press (every? zero? delta))
-                                        (on-press)))
+                                      (if (and on-press (every? zero? delta))
+                                        (on-press)
+                                        (set-position-pt! (snap-pt @position-rect))))
                         :on-move apply-delta})]
     (fn []
       (let [[tx ty] @translation
@@ -146,8 +162,6 @@
 (defn row-color [row-number] (nth ["#9ccc65" "#ffa726" "#fdd835" "#29b6f6"] row-number))
 
 (defmulti piece :clue/type)
-
-(def side-length 30)
 
 (def cell-style {:height side-length
                  :width side-length})
