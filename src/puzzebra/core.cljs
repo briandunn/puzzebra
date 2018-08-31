@@ -2,6 +2,7 @@
   (:require
     ["react-native" :as ReactNative]
     [clojure.spec.alpha :as s]
+    [clojure.pprint :refer [pprint]]
     [cognitect.transit :as t]
     [reagent.core :as r :refer [adapt-react-class reactify-component]]
     [reagent.ratom :refer [reaction cursor atom]]))
@@ -63,15 +64,15 @@
 
 (def collisions (reaction (collisions* (get @state :positions))))
 
-(defn rect->pt [rect] [(get rect :x 0) (get rect :y 0)])
+(defn rect->pt [rect] (mapv #(get rect % 0) [:x :y]))
 
 (defn snap-pt [rect]
-  (let [{board-rect :board-rect {{size :puzzle/width} :puzzle/grid} :puzzle/puzzle} @state
-        [board-pt rect-pt] (map rect->pt [board-rect rect])
-        round (partial round-to-nearest side-length)]
-    (if
-      (collision? board-rect rect)
-      (mapv + board-pt (map round (map - rect-pt board-pt)))
+  (let [{board-rect :board-rect} @state
+        rect-pt (rect->pt rect)]
+    (if (collision? board-rect rect)
+      (let [round (partial round-to-nearest side-length)
+            board-pt (rect->pt board-rect)]
+        (mapv + board-pt (map round (map - rect-pt board-pt))))
       rect-pt)))
 
 (defn set-position-pt! [clue pt]
@@ -159,7 +160,10 @@
       (.then #(.text %))
       (.then (partial t/read (t/reader :json))))))
 
-(defn row-color [row-number] (nth ["#9ccc65" "#ffa726" "#fdd835" "#29b6f6"] row-number))
+(defn row-color [row-number]
+  (nth
+    ["#9ccc65" "#ffa726" "#fdd835" "#29b6f6" "#80cbc4" "#ef5350" "#8d6e63"]
+    row-number))
 
 (defmulti piece :clue/type)
 
@@ -226,7 +230,7 @@
              ^{:key k}[view {:style cell-style}])))])))
 
 (defn root []
-  (let [size 4
+  (let [size 3
         config [(list
                   {:puzzle/puzzle [:puzzle/clues :puzzle/solution]}
                   (merge (get difficulties "normal") {:size size}))]]
@@ -241,8 +245,7 @@
                      :justify-content "center"}}
        (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
          (let [[in-house other-clues] (partition-by #(= (:clue/type %) :in-house) (sort-by :clue/type clues))]
-           (into [view {:style {
-                                :width "100%"
+           (into [view {:style {:width "100%"
                                 :justify-content "center"
                                 :align-items "center"
                                 :background-color "#eee"
