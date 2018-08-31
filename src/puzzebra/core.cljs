@@ -5,6 +5,7 @@
     [clojure.pprint :refer [pprint]]
     [cognitect.transit :as t]
     [reagent.core :as r :refer [adapt-react-class reactify-component]]
+    [puzzebra.game :as game :refer [valid?]]
     [reagent.ratom :refer [reaction cursor atom]]))
 
 (def text (adapt-react-class (.-Text ReactNative)))
@@ -14,7 +15,7 @@
 (def state (atom {}))
 (def side-length 30)
 
-(defn p [x] (print x) x)
+(defn p [x] (pprint x) x)
 
 (defn get-fields [fields js] (mapv (partial aget js) fields))
 
@@ -31,10 +32,6 @@
           (clj->js (reduce (fn [acc [k v]] (assoc acc (k key-names) (call-with-delta v))) {} config)))))))
 
 (defn round-to-nearest [size value] (* size (.round js/Math (/ value size))))
-
-(defn measure [ref callback]
-  (.measure ref (fn [& args]
-                  (callback (zipmap [:x :y :width :height :page-x :page-y] args)))))
 
 (defn on-layout [callback]
   #(->>
@@ -66,14 +63,21 @@
 
 (defn rect->pt [rect] (mapv #(get rect % 0) [:x :y]))
 
-(defn snap-pt [rect]
+(defn snap-pt [clue rect]
   (let [{board-rect :board-rect} @state
         rect-pt (rect->pt rect)]
     (if (collision? board-rect rect)
-      (let [round (partial round-to-nearest side-length)
-            board-pt (rect->pt board-rect)]
-        (mapv + board-pt (map round (map - rect-pt board-pt))))
+      (let [board-pt (rect->pt board-rect)
+            [col row] (mapv #(.round js/Math ( / % side-length)) (map - rect-pt board-pt))
+            snapped-pt (->> [col row] (map (partial * side-length)) (mapv + board-pt))]
+        (if (valid? @state clue [row col]) snapped-pt rect-pt))
       rect-pt)))
+
+(def won?
+  (reaction
+    (let [{{clues :puzzle/clues} :puzzle/puzzle, board-rect :board-rect, positions :positions} @state]
+      (= (count (filter (partial collision? board-rect) (vals positions)))
+         (count (filter #(not= (:clue/type %) :in-house) clues))))))
 
 (defn set-position-pt! [clue pt]
   (swap!
@@ -101,7 +105,7 @@
                         :on-release (fn [delta]
                                       (if (and on-press (every? zero? delta))
                                         (on-press)
-                                        (set-position-pt! (snap-pt @position-rect))))
+                                        (set-position-pt! (snap-pt key @position-rect))))
                         :on-move apply-delta})]
     (fn []
       (let [[tx ty] @translation
@@ -166,6 +170,7 @@
     row-number))
 
 (defmulti piece :clue/type)
+
 
 (def cell-style {:height side-length
                  :width side-length})
@@ -234,7 +239,7 @@
         config [(list
                   {:puzzle/puzzle [:puzzle/clues :puzzle/solution]}
                   (merge (get difficulties "normal") {:size size}))]]
-    (.then (fetch-puzzle config) (partial reset! state))
+    (.then (fetch-puzzle config) #(reset! state (assoc % :board (game/init-board %))))
     (fn []
       [view {:style {:align-items "center"
                      :background-color "#fff"
@@ -251,6 +256,7 @@
                                 :background-color "#eee"
                                 :flex-direction "row"
                                 :flex-wrap "wrap"
-                                }} ] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues)) [board in-house size]))))])))
+                                }} ] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues)) [board in-house size]))))
+       (when @won? [text "you win!"])])))
 
 (def app (reactify-component root))
