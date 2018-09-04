@@ -63,6 +63,13 @@
 
 (defn rect->pt [rect] (mapv #(get rect % 0) [:x :y]))
 
+(defn position-clue-at-point [state clue pt]
+  (update-in
+    state
+    [:positions clue]
+    merge
+    (zipmap [:x :y] pt)))
+
 (defn snap-pt! [clue rect]
   (let [{board-rect :board-rect} @state
         rect-pt (rect->pt rect)]
@@ -73,26 +80,14 @@
         (when (valid? @state clue [row col])
           (swap! state #(->
                           %
-                          (update :placements assoc clue col)
-                          p
-                          (update-in
-                            [:positions clue]
-                            merge
-                            (zipmap [:x :y] snapped-pt)))))))))
+                          (game/place clue col)
+                          (position-clue-at-point clue snapped-pt))))))))
 
 (def won?
   (reaction
     (let [{{clues :puzzle/clues} :puzzle/puzzle, board-rect :board-rect, positions :positions} @state]
       (= (count (filter (partial collision? board-rect) (vals positions)))
          (count (filter #(not= (:clue/type %) :in-house) clues))))))
-
-(defn set-position-pt! [clue pt]
-  (swap!
-    state
-    update-in
-    [:positions clue]
-    merge
-    (zipmap [:x :y] pt)))
 
 (defn draggable []
   (let [layout-pt (atom [0 0])
@@ -101,8 +96,7 @@
         position-rect (cursor state [:positions key])
         position-pt (reaction (rect->pt @position-rect))
         translation (reaction (mapv - @position-pt @layout-pt))
-        set-position-pt! (partial set-position-pt! key)
-        apply-delta #(set-position-pt! (mapv + @drag-start-pt %))
+        apply-delta #(swap! state position-clue-at-point key (mapv + @drag-start-pt %))
         layout (on-layout (fn [rect]
                             (reset! layout-pt (rect->pt rect))
                             (swap! state update :positions assoc key rect)))
@@ -110,7 +104,7 @@
                        {:on-start-should-set (constantly true)
                         :on-grant #(do
                                      (reset! drag-start-pt @position-pt)
-                                     (swap! state update :placements dissoc key))
+                                     (swap! state game/displace key))
                         :on-release (fn [delta]
                                       (if (and on-press (every? zero? delta))
                                         (on-press)

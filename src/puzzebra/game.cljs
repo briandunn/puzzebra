@@ -36,6 +36,8 @@
 (defn unique? [col] (apply = (map count [(set col) col])))
 
 (defn flip [state clue] (update-in state [:flips clue] not))
+(defn place [state clue col] (update state :placements assoc clue col))
+(defn displace [state clue] (dissoc state :placements dissoc clue))
 
 (defn valid? [state clue [placed-row placed-col]]
   (let [{{solution :puzzle/solution} :puzzle/puzzle} state
