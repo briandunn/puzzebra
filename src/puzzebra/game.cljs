@@ -7,46 +7,52 @@
 (defn position-placement [placed-col [[clue-row clue-col] item]]
   [[clue-row (+ clue-col placed-col)] item])
 
-(defmulti clue->placements :clue/type)
+(defmulti clue->placements #(:clue/type %2))
 
-(defmethod clue->placements :next-to [{args :clue/args}] [])
+(defmethod clue->placements :next-to [_ {args :clue/args}] [])
 
-(defmethod clue->placements :same-house [{args :clue/args}]
-  (apply hash-map (mapcat (fn [[row item]] [[row 0] item]) args)))
+(defmethod clue->placements :same-house [{placements :placements} clue]
+  (->>
+    clue
+    :clue/args
+    (map (fn [[row item]] [[row (get placements clue 0)] item]))))
 
-(defmethod clue->placements :left-of [{args :clue/args}]
-  (reduce
-    (fn [acc [row item col]]
-      (assoc acc [row col] item))
-    {}
-    (map conj args (range))))
+(defmethod clue->placements :left-of [{placements :placements} clue]
+  (->>
+    clue
+    :clue/args
+    (map (fn [col [row item]] [[row (+ (get placements clue 0) col)] item]) (range))))
 
-(defn ->board [{placements :placements {clues :puzzle/clues} :puzzle/puzzle}]
-  (let [in-house (filter #(= (:clue/type %) :in-house) (sort-by :clue/type clues))
-        board (reduce (fn [board {[[y item] x] :clue/args}] (assoc board [y x] item)) {} in-house)]
-    (reduce
-      (fn [board [clue col]]
-        (apply
-          assoc
-          board
-          (mapcat (partial position-placement col) (clue->placements clue))))
-      board
-      placements)))
+(defn ->board [{placements :placements {clues :puzzle/clues} :puzzle/puzzle :as state}]
+  (let [board (->> clues
+                   (filter #(= (:clue/type %) :in-house))
+                   (map (fn [{[[y item] x] :clue/args}] [[y x] item])))]
+    (->>
+      placements
+      keys
+      (map (partial clue->placements state))
+      (concat board)
+      (reduce conj)
+      (apply hash-map))))
 
 (defn unique? [col] (apply = (map count [(set col) col])))
 
-(defn flip [state clue] (update-in state [:flips clue] not))
-(defn place [state clue col] (update state :placements assoc clue col))
-(defn displace [state clue] (dissoc state :placements dissoc clue))
+(defn flip [state clue]
+  (update-in state [:flips clue] not))
+
+(defn place [state clue col]
+  (update state :placements assoc clue col))
+
+(defn displace [state clue]
+  (dissoc state :placements dissoc clue))
 
 (defn valid? [state clue [placed-row placed-col]]
   (let [{{solution :puzzle/solution} :puzzle/puzzle} state
         board (->board state)
-        placements (clue->placements clue)
+        placements (clue->placements (update state :placements assoc clue placed-col) clue)
         right-board-col (apply max (map second (keys solution)))
         clue-top-row (apply min (map (fn [[[row _] _]] row) placements))
-        positioned-placements (apply hash-map (mapcat (partial position-placement placed-col) placements))
-        positioned-clue-cols (map (fn [[[_ col] _]] col) positioned-placements)]
+        positioned-clue-cols (map (fn [[[_ col] _]] col) placements)]
     (and
       (= placed-row clue-top-row)                           ; correct row
       (>= (apply min positioned-clue-cols) 0)               ; right of left board edge
@@ -55,10 +61,11 @@
               (fn [[pos item]]
                 (let [board-item (get board pos)]
                   (or (nil? board-item) (= board-item item))))
-              positioned-placements)
-      (->> board                                            ; items in every row are unique
-           (merge positioned-placements)
-           (group-by ffirst)
-           vals
-           (map (partial map last))
-           (every? unique?)))))
+              placements)
+      (->>
+        board                                               ; items in every row are unique
+        (merge (apply hash-map (reduce conj placements)))
+        (group-by ffirst)
+        vals
+        (map (partial map last))
+        (every? unique?)))))
