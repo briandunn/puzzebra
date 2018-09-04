@@ -63,15 +63,22 @@
 
 (defn rect->pt [rect] (mapv #(get rect % 0) [:x :y]))
 
-(defn snap-pt [clue rect]
+(defn snap-pt! [clue rect]
   (let [{board-rect :board-rect} @state
         rect-pt (rect->pt rect)]
-    (if (collision? board-rect rect)
+    (when (collision? board-rect rect)
       (let [board-pt (rect->pt board-rect)
             [col row] (mapv #(.round js/Math ( / % side-length)) (map - rect-pt board-pt))
             snapped-pt (->> [col row] (map (partial * side-length)) (mapv + board-pt))]
-        (if (valid? @state clue [row col]) snapped-pt rect-pt))
-      rect-pt)))
+        (when (valid? @state clue [row col])
+          (swap! state #(->
+                          %
+                          (update :placements assoc clue col)
+                          p
+                          (update-in
+                            [:positions clue]
+                            merge
+                            (zipmap [:x :y] snapped-pt)))))))))
 
 (def won?
   (reaction
@@ -101,11 +108,13 @@
                             (swap! state update :positions assoc key rect)))
         pan-handlers (create-pan-responder
                        {:on-start-should-set (constantly true)
-                        :on-grant #(reset! drag-start-pt @position-pt)
+                        :on-grant #(do
+                                     (reset! drag-start-pt @position-pt)
+                                     (swap! state update :placements dissoc key))
                         :on-release (fn [delta]
                                       (if (and on-press (every? zero? delta))
                                         (on-press)
-                                        (set-position-pt! (snap-pt key @position-rect))))
+                                        (snap-pt! key @position-rect)))
                         :on-move apply-delta})]
     (fn []
       (let [[tx ty] @translation
@@ -235,11 +244,11 @@
              ^{:key k}[view {:style cell-style}])))])))
 
 (defn root []
-  (let [size 3
+  (let [size 5
         config [(list
                   {:puzzle/puzzle [:puzzle/clues :puzzle/solution]}
                   (merge (get difficulties "normal") {:size size}))]]
-    (.then (fetch-puzzle config) #(reset! state (assoc % :board (game/init-board %))))
+    (.then (fetch-puzzle config) (partial reset! state))
     (fn []
       [view {:style {:align-items "center"
                      :background-color "#fff"
