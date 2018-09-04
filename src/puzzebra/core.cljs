@@ -218,8 +218,8 @@
      (doall (map (fn [component i] ^{:key i}[component]) cells (range)))]))
 
 (defmethod piece :next-to [{args :clue/args :as key}]
-  (let [flip? (atom false)
-        on-press #(swap! flip? not)]
+  (let [flip? (cursor state [:flips key])
+        on-press #(swap! state game/flip key)]
     (fn []
       [draggable {:key key
                   :on-press on-press

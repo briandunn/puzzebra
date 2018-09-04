@@ -8,7 +8,9 @@
   [[clue-row (+ clue-col placed-col)] item])
 
 (defmulti clue->placements :clue/type)
+
 (defmethod clue->placements :next-to [{args :clue/args}] [])
+
 (defmethod clue->placements :same-house [{args :clue/args}]
   (apply hash-map (mapcat (fn [[row item]] [[row 0] item]) args)))
 
@@ -32,6 +34,8 @@
       placements)))
 
 (defn unique? [col] (apply = (map count [(set col) col])))
+
+(defn flip [state clue] (update-in state [:flips clue] not))
 
 (defn valid? [state clue [placed-row placed-col]]
   (let [{{solution :puzzle/solution} :puzzle/puzzle} state
