@@ -9,7 +9,13 @@
 
 (defmulti clue->placements #(:clue/type %2))
 
-(defmethod clue->placements :next-to [_ {args :clue/args}] [])
+(defmethod clue->placements :next-to [{placements :placements flips :flips}
+                                      {args :clue/args :as clue}]
+  (let [placed-col (get placements clue 0)
+        flip? (get flips clue)]
+    (->>
+      (if flip? (reverse args) args)
+      (map (fn [col [row item]] [[row (+ placed-col col)] item]) (range)))))
 
 (defmethod clue->placements :same-house [{placements :placements} clue]
   (->>
@@ -23,6 +29,9 @@
     :clue/args
     (map (fn [col [row item]] [[row (+ (get placements clue 0) col)] item]) (range))))
 
+(defn kv->map [kv]
+  (->> kv (reduce concat) (apply hash-map)))
+
 (defn ->board [{placements :placements {clues :puzzle/clues} :puzzle/puzzle :as state}]
   (let [board (->> clues
                    (filter #(= (:clue/type %) :in-house))
@@ -32,8 +41,7 @@
       keys
       (map (partial clue->placements state))
       (concat board)
-      (reduce conj)
-      (apply hash-map))))
+      kv->map)))
 
 (defn unique? [col] (apply = (map count [(set col) col])))
 
@@ -45,6 +53,13 @@
 
 (defn displace [state clue]
   (dissoc state :placements dissoc clue))
+
+(defn rows [board]
+  (->>
+    board
+    (group-by ffirst)
+    vals
+    (map (partial map last))))
 
 (defn valid? [state clue [placed-row placed-col]]
   (let [{{solution :puzzle/solution} :puzzle/puzzle} state
@@ -64,8 +79,6 @@
               placements)
       (->>
         board                                               ; items in every row are unique
-        (merge (apply hash-map (reduce conj placements)))
-        (group-by ffirst)
-        vals
-        (map (partial map last))
+        (merge (kv->map placements))
+        rows
         (every? unique?)))))

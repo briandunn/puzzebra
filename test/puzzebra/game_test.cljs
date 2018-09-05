@@ -7,7 +7,10 @@
 ; | 1
 (def left-of {:clue/type :left-of, :clue/args [[0 0] [1 1]]})
 (def state {:puzzle/puzzle {:puzzle/solution {[0 0] 0 [2 2] 1}
-                            :puzzle/clues [{:clue/type :in-house :clue/args [[0 0] 0]} ]}})
+                            :puzzle/clues [
+                                           {:clue/type :in-house :clue/args [[0 0] 0]}
+                                           {:clue/type :in-house :clue/args [[0 1] 1]}
+                                           ]}})
 
 (deftest validates-row []
   (is (game/valid? state left-of [0 0]))
@@ -28,3 +31,9 @@
 (deftest rows-are-unique []
   (is (game/valid? state left-of [0 0]))
   (is (not (game/valid? state left-of [0 1]))))
+
+(deftest clue-placements-flips-next-to []
+  (let [next-to (assoc left-of :clue/type :next-to)
+        state {:flips {next-to true}}]
+    (is (= (game/kv->map (game/clue->placements state next-to )) {[0 1] 0
+                                                                  [1 0] 1}))))
