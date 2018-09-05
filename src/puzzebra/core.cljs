@@ -84,22 +84,20 @@
                           (position-clue-at-point clue snapped-pt))))))))
 
 (def won?
-  (reaction
-    (let [{{clues :puzzle/clues} :puzzle/puzzle, board-rect :board-rect, positions :positions} @state]
-      (= (count (filter (partial collision? board-rect) (vals positions)))
-         (count (filter #(not= (:clue/type %) :in-house) clues))))))
+  (reaction (game/won? @state)))
 
 (defn draggable []
-  (let [layout-pt (atom [0 0])
+  (let [layout-pt (atom nil)
         drag-start-pt (atom [0 0])
         {:keys [style key on-press]} (r/props (r/current-component))
         position-rect (cursor state [:positions key])
         position-pt (reaction (rect->pt @position-rect))
-        translation (reaction (mapv - @position-pt @layout-pt))
+        translation (reaction (mapv - @position-pt (or @layout-pt [0 0])))
         apply-delta #(swap! state position-clue-at-point key (mapv + @drag-start-pt %))
         layout (on-layout (fn [rect]
-                            (reset! layout-pt (rect->pt rect))
-                            (swap! state update :positions assoc key rect)))
+                            (when-not @layout-pt
+                              (swap! state update :positions assoc key rect))
+                            (reset! layout-pt (rect->pt rect))))
         pan-handlers (create-pan-responder
                        {:on-start-should-set (constantly true)
                         :on-grant #(do

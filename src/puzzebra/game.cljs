@@ -43,6 +43,11 @@
       (concat board)
       kv->map)))
 
+(defn won? [{{clues :puzzle/clues} :puzzle/puzzle, placements :placements}]
+  (=
+   (count placements)
+   (count (filter #(not= (:clue/type %) :in-house) clues))))
+
 (defn unique? [col] (apply = (map count [(set col) col])))
 
 (defn flip [state clue]
@@ -52,7 +57,7 @@
   (update state :placements assoc clue col))
 
 (defn displace [state clue]
-  (dissoc state :placements dissoc clue))
+  (update state :placements dissoc clue))
 
 (defn rows [board]
   (->>
