@@ -3,9 +3,9 @@
     ["react-native" :as ReactNative]
     [clojure.spec.alpha :as s]
     [clojure.pprint :refer [pprint]]
-    [cognitect.transit :as t]
     [reagent.core :as r :refer [adapt-react-class reactify-component]]
     [puzzebra.game :as game :refer [valid?]]
+    [puzzebra.puzzle :as puzzle]
     [reagent.ratom :refer [reaction cursor atom]]))
 
 (def text (adapt-react-class (.-Text ReactNative)))
@@ -120,51 +120,6 @@
               :style (merge style {:border-color (if collision? "red" "white")})})]
           (r/children (r/current-component)))))))
 
-(def difficulties
-  {"beginner"
-   {:extra-clues 2
-    :clue-weights
-    {:in-house 1.2
-     :left-of 1.0
-     :same-house 1.3}
-    :ensured-clues
-    {:in-house 1
-     :same-house 2
-     :left-of 1}}
-   "normal"
-   {:extra-clues 1
-    :clue-weights
-    {:in-house 1.0
-     :left-of 1.0
-     :next-to 1.0
-     :same-house 1.0}
-    :ensured-clues
-    {:in-house 1
-     :same-house 1
-     :left-of 1}}
-   "expert"
-   {:extra-clues 0
-    :clue-weights
-    {:in-house 0.9
-     :left-of 1.1
-     :next-to 1.2
-     :same-house 1.1}
-    :ensured-clues
-    {:same-house 1
-     :left-of 1}}})
-
-(defn fetch-puzzle [config]
-  (let [body (t/write (t/writer :json) config)]
-    (->
-      (.fetch
-        js/window
-        "https://zebra.joshuadavey.com/api"
-        (clj->js {:method "POST"
-                  :headers {"Content-Type" "application/transit+json"}
-                  :body body}))
-      (.then #(.text %))
-      (.then (partial t/read (t/reader :json))))))
-
 (defn row-color [row-number]
   (nth
     ["#9ccc65" "#ffa726" "#fdd835" "#29b6f6" "#80cbc4" "#ef5350" "#8d6e63"]
@@ -236,11 +191,8 @@
              ^{:key k}[view {:style cell-style}])))])))
 
 (defn root []
-  (let [size 5
-        config [(list
-                  {:puzzle/puzzle [:puzzle/clues :puzzle/solution]}
-                  (merge (get difficulties "normal") {:size size}))]]
-    (.then (fetch-puzzle config) (partial reset! state))
+  (let [size 5]
+    (puzzle/fetch {:difficulty "normal" :size size} (partial reset! state))
     (fn []
       [view {:style {:align-items "center"
                      :background-color "#fff"
