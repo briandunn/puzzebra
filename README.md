@@ -1,3 +1,13 @@
+# TODO:
+
+* Only drag pieces by cells. Right now it's hard rearrange pieces once they are placed on the grid.
+* For next-to, rotate the touched cell around the rest.
+* Snap pieces together when dropped together, if the overlapping cell is a match. These new shapes can be drug now.
+* Pieces that don't match where dropped return to layout point.
+* Animate everything.
+* Add new game form with board size and difficulty level inputs.
+* Win sequence fades in values for blank cells.
+
 This project was bootstrapped with [Create React Native App](https://github.com/react-community/create-react-native-app).
 
 Below you'll find information about performing common tasks. The most recent version of this guide is available [here](https://github.com/react-community/create-react-native-app/blob/master/react-native-scripts/template/README.md).
