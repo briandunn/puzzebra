@@ -4,8 +4,7 @@
     [clojure.pprint :refer [pprint]]
     [cognitect.transit :as t]))
 
-(defn position-placement [placed-col [[clue-row clue-col] item]]
-  [[clue-row (+ clue-col placed-col)] item])
+(defn p [x] (pprint x) x)
 
 (defmulti clue->placements #(:clue/type %2))
 
@@ -39,7 +38,7 @@
     (->>
       placements
       keys
-      (map (partial clue->placements state))
+      (mapcat (partial clue->placements state))
       (concat board)
       kv->map)))
 
