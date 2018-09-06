@@ -86,6 +86,13 @@
 (def won?
   (reaction (game/won? @state)))
 
+; (def x (atom 0))
+
+; (defn inc-x [] (swap! x (partial + 0.01))
+;   (.requestAnimationFrame js/window inc-x))
+
+; (inc-x)
+
 (defn draggable []
   (let [layout-pt (atom nil)
         drag-start-pt (atom [0 0])
@@ -94,6 +101,8 @@
         position-pt (reaction (rect->pt @position-rect))
         translation (reaction (mapv - @position-pt (or @layout-pt [0 0])))
         apply-delta #(swap! state position-clue-at-point key (mapv + @drag-start-pt %))
+        placement (cursor state [:placements key])
+        placed? (reaction (not (nil? @placement)))
         layout (on-layout (fn [rect]
                             (when-not @layout-pt
                               (swap! state update :positions assoc key rect))
@@ -109,15 +118,14 @@
                                         (snap-pt! key @position-rect)))
                         :on-move apply-delta})]
     (fn []
-      (let [[tx ty] @translation
-            collision? (contains? @collisions key)]
+      (let [[tx ty] @translation]
         (into
           [view
            (merge
              pan-handlers
              {:transform [{:translateX tx} {:translateY ty}]
               :on-layout layout
-              :style (merge style {:border-color (if collision? "red" "white")})})]
+              :style (merge style (if @placed? {:shadow-opacity 0} {:shadow-opacity 1 :shadow-offset {:width 0 :height 0}}))})]
           (r/children (r/current-component)))))))
 
 (defn row-color [row-number]
@@ -143,7 +151,8 @@
    :width (* (+ 1 side-length) cells-wide)})
 
 (defn cell [i y]
-  [view {:style (merge cell-style {:background-color (row-color y) :justify-content "center"})}
+  [view {:style (merge cell-style {:background-color (row-color y)
+                                   :justify-content "center"})}
    [text {:style {:text-align "center"}} i]])
 
 (defn empty-cell []
@@ -170,7 +179,9 @@
     (fn []
       [draggable {:key key
                   :on-press on-press
-                  :style (merge (clue-frame-style 2) {:border-radius 10})}
+                  :style (merge
+                           (clue-frame-style 2)
+                           {:border-radius 10})}
        (doall (map (fn [component i] ^{:key i}[component])
                    (for [y (row-range args)
                          x (range 2)]

@@ -362,6 +362,10 @@
      :left-of 1}}})
 
 (comment
+
+
+(defn fetch [_ callback] (callback (rand-nth fixtures))))
+
 (defn fetch [{:keys [difficulty size]} callback]
   (let [config [(list
                   {:puzzle/puzzle [:puzzle/clues :puzzle/solution]}
@@ -377,6 +381,4 @@
       (.then #(.text %))
       (.then (partial t/read (t/reader :json)))
       (.then (fn [puzzle]
-               (pprint puzzle) (callback puzzle)))))))
-
-(defn fetch [_ callback] (callback (rand-nth fixtures)))
+               (pprint puzzle) (callback puzzle))))))
