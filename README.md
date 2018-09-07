@@ -1,6 +1,7 @@
 # TODO:
 
-* Only drag pieces by cells. Right now it's hard rearrange pieces once they are placed on the grid.
+X Only drag pieces by cells. Right now it's hard rearrange pieces once they are placed on the grid.
+* Stack snapped pieces in order of drop, most recent on top
 * For next-to, rotate the touched cell around the rest.
 * Snap pieces together when dropped together, if the overlapping cell is a match. These new shapes can be drug now.
 * Pieces that don't match where dropped return to layout point.

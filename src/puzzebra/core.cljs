@@ -95,12 +95,13 @@
 
 (defn draggable []
   (let [layout-pt (atom nil)
-        drag-start-pt (atom [0 0])
-        {:keys [style key on-press]} (r/props (r/current-component))
+        drag (atom {:cell nil
+                    :start-pt [0 0]})
+        {:keys [key on-press]} (r/props (r/current-component))
         position-rect (cursor state [:positions key])
         position-pt (reaction (rect->pt @position-rect))
         translation (reaction (mapv - @position-pt (or @layout-pt [0 0])))
-        apply-delta #(swap! state position-clue-at-point key (mapv + @drag-start-pt %))
+        apply-delta #(swap! state position-clue-at-point key (mapv + (:start-pt @drag) %))
         placement (cursor state [:placements key])
         placed? (reaction (not (nil? @placement)))
         layout (on-layout (fn [rect]
@@ -108,17 +109,21 @@
                               (swap! state update :positions assoc key rect))
                             (reset! layout-pt (rect->pt rect))))
         pan-handlers (create-pan-responder
-                       {:on-start-should-set (constantly true)
-                        :on-grant #(do
-                                     (reset! drag-start-pt @position-pt)
-                                     (swap! state game/displace key))
+                       {:on-start-should-set #(-> state deref :touched-cell nil? not)
+                        :on-grant (fn []
+                                     (reset! drag {:start-pt @position-pt
+                                                   :cell (:touched-cell @state)})
+                                     (swap! state #(-> %
+                                                       (game/displace key)
+                                                       (dissoc :touched-cell))))
                         :on-release (fn [delta]
                                       (if (and on-press (every? zero? delta))
                                         (on-press)
                                         (snap-pt! key @position-rect)))
                         :on-move apply-delta})]
     (fn []
-      (let [[tx ty] @translation]
+      (let [[tx ty] @translation
+            {style :style} (r/props (r/current-component))]
         (into
           [view
            (merge
@@ -137,22 +142,25 @@
 
 
 (def cell-style {:height side-length
+                 :justify-content "center"
                  :width side-length})
 
 (defn clue-frame-style [cells-wide]
   {:align-items "flex-start"
-   :flex-direction "row"
-   :flex-wrap "wrap"
    :border-color "#ccc"
    :border-style "solid"
    :border-width 1
-   :overflow "hidden"
+   :flex-direction "row"
+   :flex-wrap "wrap"
    :margin 10
+   :overflow "hidden"
    :width (* (+ 1 side-length) cells-wide)})
 
 (defn cell [i y]
-  [view {:style (merge cell-style {:background-color (row-color y)
-                                   :justify-content "center"})}
+  [view {:on-start-should-set-responder #(do
+                                           (swap! state assoc :touched-cell {:row y :item i})
+                                           false)
+         :style (assoc cell-style :background-color (row-color y))}
    [text {:style {:text-align "center"}} i]])
 
 (defn empty-cell []
