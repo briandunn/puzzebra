@@ -70,28 +70,29 @@
     merge
     (zipmap [:x :y] pt)))
 
-(defn snap-pt! [clue rect]
-  (let [{board-rect :board-rect} @state
+(defn cell-distance [src-pt target-pt]
+  (mapv #(.round js/Math ( / % side-length)) (map - src-pt target-pt)))
+
+(defn snap-pt [cell-dist origin-pt]
+  (->> cell-dist (map (partial * side-length)) (mapv + origin-pt)))
+
+(defn on-drop [state clue rect drag]
+  (let [{board-rect :board-rect} state
         rect-pt (rect->pt rect)]
-    (when (collision? board-rect rect)
+    (if
+      (collision? board-rect rect)
       (let [board-pt (rect->pt board-rect)
-            [col row] (mapv #(.round js/Math ( / % side-length)) (map - rect-pt board-pt))
-            snapped-pt (->> [col row] (map (partial * side-length)) (mapv + board-pt))]
-        (when (valid? @state clue [row col])
-          (swap! state #(->
-                          %
-                          (game/place clue col)
-                          (position-clue-at-point clue snapped-pt))))))))
+            [col row] (cell-distance rect-pt board-pt)]
+        (if
+          (valid? state clue [row col])
+          (-> state
+              (game/place clue col)
+              (position-clue-at-point clue (snap-pt [col row] board-pt)))
+          state))
+      state)))
 
 (def won?
   (reaction (game/won? @state)))
-
-; (def x (atom 0))
-
-; (defn inc-x [] (swap! x (partial + 0.01))
-;   (.requestAnimationFrame js/window inc-x))
-
-; (inc-x)
 
 (defn draggable []
   (let [layout-pt (atom nil)
@@ -105,8 +106,7 @@
         placement (cursor state [:placements key])
         placed? (reaction (not (nil? @placement)))
         layout (on-layout (fn [rect]
-                            (when-not @layout-pt
-                              (swap! state update :positions assoc key rect))
+                            (swap! state update :positions assoc key rect)
                             (reset! layout-pt (rect->pt rect))))
         pan-handlers (create-pan-responder
                        {:on-start-should-set #(-> state deref :touched-cell nil? not)
@@ -119,7 +119,7 @@
                         :on-release (fn [delta]
                                       (if (and on-press (every? zero? delta))
                                         (on-press)
-                                        (snap-pt! key @position-rect)))
+                                        (swap! state on-drop key @position-rect @drag)))
                         :on-move apply-delta})]
     (fn []
       (let [[tx ty] @translation
