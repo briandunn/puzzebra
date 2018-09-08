@@ -76,7 +76,7 @@
 (defn snap-pt [cell-dist origin-pt]
   (->> cell-dist (map (partial * side-length)) (mapv + origin-pt)))
 
-(defn on-drop [state clue rect drag]
+(defn on-drop [state clue rect start-pt]
   (let [{board-rect :board-rect} state
         rect-pt (rect->pt rect)]
     (if
@@ -88,8 +88,8 @@
           (-> state
               (game/place clue col)
               (position-clue-at-point clue (snap-pt [col row] board-pt)))
-          state))
-      state)))
+          (position-clue-at-point state clue start-pt)))
+      (position-clue-at-point state clue start-pt))))
 
 (def won?
   (reaction (game/won? @state)))
@@ -119,7 +119,7 @@
                         :on-release (fn [delta]
                                       (if (and on-press (every? zero? delta))
                                         (on-press)
-                                        (swap! state on-drop key @position-rect @drag)))
+                                        (swap! state on-drop key @position-rect @layout-pt)))
                         :on-move apply-delta})]
     (fn []
       (let [[tx ty] @translation
