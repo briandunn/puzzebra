@@ -85,19 +85,19 @@
        (game/valid? state clue)))
 
 (defn on-drop [state clue rect start-pt]
-  (let [{board-rect :board-rect} state
-        rect-pt (rect->pt rect)]
-    (if
-      (collision? board-rect rect)
-      (let [board-pt (rect->pt board-rect)
-            [col row] (cell-distance rect-pt board-pt)]
-        (if
-          (game/valid? state clue [row col])
-          (-> state
-              (game/place clue col)
-              (position-clue-at-point clue (snap-pt [col row] board-pt)))
-          (position-clue-at-point state clue start-pt)))
-      (position-clue-at-point state clue start-pt))))
+  (or
+    (let [{board-rect :board-rect} state
+          rect-pt (rect->pt rect)]
+      (if
+        (collision? board-rect rect)
+        (let [board-pt (rect->pt board-rect)
+              [col row] (cell-distance rect-pt board-pt)]
+          (if
+            (game/valid? state clue [row col])
+            (-> state
+                (game/place clue col)
+                (position-clue-at-point clue (snap-pt [col row] board-pt)))))))
+    (position-clue-at-point state clue start-pt)))
 
 (def won?
   (reaction (game/won? @state)))
