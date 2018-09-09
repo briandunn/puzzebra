@@ -4,7 +4,7 @@
     [clojure.spec.alpha :as s]
     [clojure.pprint :refer [pprint]]
     [reagent.core :as r :refer [adapt-react-class reactify-component]]
-    [puzzebra.game :as game :refer [valid?]]
+    [puzzebra.game :as game]
     [puzzebra.puzzle :as puzzle]
     [reagent.ratom :refer [reaction cursor atom]]))
 
@@ -76,6 +76,14 @@
 (defn snap-pt [cell-dist origin-pt]
   (->> cell-dist (map (partial * side-length)) (mapv + origin-pt)))
 
+(defn valid? [state clue position-pt]
+  (->> state
+       :board-rect
+       rect->pt
+       (cell-distance position-pt)
+       reverse
+       (game/valid? state clue)))
+
 (defn on-drop [state clue rect start-pt]
   (let [{board-rect :board-rect} state
         rect-pt (rect->pt rect)]
@@ -84,7 +92,7 @@
       (let [board-pt (rect->pt board-rect)
             [col row] (cell-distance rect-pt board-pt)]
         (if
-          (valid? state clue [row col])
+          (game/valid? state clue [row col])
           (-> state
               (game/place clue col)
               (position-clue-at-point clue (snap-pt [col row] board-pt)))
@@ -105,6 +113,7 @@
         apply-delta #(swap! state position-clue-at-point key (mapv + (:start-pt @drag) %))
         placement (cursor state [:placements key])
         placed? (reaction (not (nil? @placement)))
+        valid? (reaction (valid? @state key @position-pt))
         layout (on-layout (fn [rect]
                             (swap! state update :positions assoc key rect)
                             (reset! layout-pt (rect->pt rect))))
@@ -130,7 +139,7 @@
              pan-handlers
              {:transform [{:translateX tx} {:translateY ty}]
               :on-layout layout
-              :style (merge style (if @placed? {:shadow-opacity 0} {:shadow-opacity 1 :shadow-offset {:width 0 :height 0}}))})]
+              :style (merge style (if @valid? {:border-color "green"} {}) {:shadow-offset {:width 0 :height 0} :shadow-opacity (if @placed? 0 1 )})})]
           (r/children (r/current-component)))))))
 
 (defn row-color [row-number]
