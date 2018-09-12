@@ -1,7 +1,6 @@
 (ns puzzebra.puzzle
   (:require
     [clojure.spec.alpha :as s]
-    [clojure.pprint :refer [pprint]]
     [cognitect.transit :as t]))
 
 (def fixtures [
@@ -361,10 +360,7 @@
     {:same-house 1
      :left-of 1}}})
 
-(comment
-
-
-(defn fetch [_ callback] (callback (rand-nth fixtures))))
+; (defn fetch [_ callback] (callback (rand-nth fixtures)))
 
 (defn fetch [{:keys [difficulty size]} callback]
   (let [config [(list
@@ -380,5 +376,4 @@
                   :body body}))
       (.then #(.text %))
       (.then (partial t/read (t/reader :json)))
-      (.then (fn [puzzle]
-               (pprint puzzle) (callback puzzle))))))
+      (.then callback))))

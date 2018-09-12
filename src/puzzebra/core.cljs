@@ -6,6 +6,7 @@
     [reagent.core :as r :refer [adapt-react-class reactify-component]]
     [puzzebra.game :as game]
     [puzzebra.puzzle :as puzzle]
+    [puzzebra.animated :as animated]
     [reagent.ratom :refer [reaction cursor atom]]))
 
 (def text (adapt-react-class (.-Text ReactNative)))
@@ -84,63 +85,54 @@
        reverse
        (game/valid? state clue)))
 
-(defn on-drop [state clue rect start-pt]
+(defn on-drop [state clue start-pt]
   (or
-    (let [{board-rect :board-rect} state
-          rect-pt (rect->pt rect)]
-      (if
-        (collision? board-rect rect)
-        (let [board-pt (rect->pt board-rect)
-              [col row] (cell-distance rect-pt board-pt)]
-          (if
-            (game/valid? state clue [row col])
-            (-> state
-                (game/place clue col)
-                (position-clue-at-point clue (snap-pt [col row] board-pt)))))))
+    (let [{board-rect :board-rect positions :positions} state
+          rect (get positions clue)
+          board-pt (rect->pt board-rect)
+          [col row] (cell-distance (rect->pt rect) board-pt)]
+      (when (game/valid? state clue [row col])
+        (-> state
+            (game/place clue col)
+            (position-clue-at-point clue (snap-pt [col row] board-pt)))))
     (position-clue-at-point state clue start-pt)))
 
 (def won?
   (reaction (game/won? @state)))
 
 (defn draggable []
-  (let [layout-pt (atom nil)
-        drag (atom {:cell nil
-                    :start-pt [0 0]})
-        {:keys [key on-press]} (r/props (r/current-component))
+  (let [{:keys [key on-press]} (r/props (r/current-component))
         position-rect (cursor state [:positions key])
         position-pt (reaction (rect->pt @position-rect))
-        translation (reaction (mapv - @position-pt (or @layout-pt [0 0])))
-        apply-delta #(swap! state position-clue-at-point key (mapv + (:start-pt @drag) %))
         placement (cursor state [:placements key])
         placed? (reaction (not (nil? @placement)))
         valid? (reaction (valid? @state key @position-pt))
-        layout (on-layout (fn [rect]
-                            (swap! state update :positions assoc key rect)
-                            (reset! layout-pt (rect->pt rect))))
-        pan-handlers (create-pan-responder
-                       {:on-start-should-set #(-> state deref :touched-cell nil? not)
-                        :on-grant (fn []
-                                     (reset! drag {:start-pt @position-pt
-                                                   :cell (:touched-cell @state)})
-                                     (swap! state #(-> %
-                                                       (game/displace key)
-                                                       (dissoc :touched-cell))))
-                        :on-release (fn [delta]
-                                      (if (and on-press (every? zero? delta))
-                                        (on-press)
-                                        (swap! state on-drop key @position-rect @layout-pt)))
-                        :on-move apply-delta})]
+        drag-handlers {:on-start-should-set #(-> state deref :touched-cell nil? not)
+                       :on-release (fn [delta layout-pt spring-to]
+                                     (if (and on-press (every? zero? delta))
+                                       (on-press)
+                                       (do
+                                         (swap! state on-drop key layout-pt)
+                                         (spring-to @position-pt))))
+                       :on-move (partial swap! state position-clue-at-point key)
+                       :on-grant (fn []
+                                   (swap! state #(-> %
+                                                     (game/displace key)
+                                                     (dissoc :touched-cell))))}]
     (fn []
-      (let [[tx ty] @translation
-            {style :style} (r/props (r/current-component))]
+      (let [this (r/current-component)
+            {style :style} (r/props this)
+            children (r/children this)]
         (into
-          [view
+          [animated/draggable
            (merge
-             pan-handlers
-             {:transform [{:translateX tx} {:translateY ty}]
-              :on-layout layout
-              :style (merge style (if @valid? {:border-color "green"} {}) {:shadow-offset {:width 0 :height 0} :shadow-opacity (if @placed? 0 1 )})})]
-          (r/children (r/current-component)))))))
+             drag-handlers
+             {:style (merge
+                       style
+                       (if @valid? {:border-color "green"} {})
+                       {:shadow-offset {:width 0 :height 0}
+                        :shadow-opacity (if @placed? 0 1 )})})]
+          children)))))
 
 (defn row-color [row-number]
   (nth
@@ -148,7 +140,6 @@
     row-number))
 
 (defmulti piece :clue/type)
-
 
 (def cell-style {:height side-length
                  :justify-content "center"
