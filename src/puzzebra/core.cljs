@@ -209,14 +209,14 @@
                      :flex 1
                      :justify-content "center"}}
        (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
-         (let [[in-house other-clues] (partition-by #(= (:clue/type %) :in-house) (sort-by :clue/type clues))]
+         (let [{in-house true other-clues false} (group-by #(= (:clue/type %) :in-house) clues)]
            (into [view {:style {:width "100%"
                                 :justify-content "center"
                                 :align-items "center"
                                 :background-color "#eee"
                                 :flex-direction "row"
                                 :flex-wrap "wrap"
-                                }} ] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) other-clues)) [board in-house size]))))
+                                }} ] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) (sort-by :clue/type other-clues))) [board in-house size]))))
        (when @won? [text "you win!"])])))
 
 (def app (reactify-component root))
