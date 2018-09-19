@@ -146,10 +146,10 @@
    :width (* (+ 1 side-length) cells-wide)})
 
 (defn cell [i y]
-  [view {:on-start-should-set-responder #(do
-                                           (swap! state assoc :touched-cell {:row y :item i})
-                                           false)
-         :style (assoc cell-style :background-color (row-color y))}
+  [animated/fade-in {:on-start-should-set-responder #(do
+                                                       (swap! state assoc :touched-cell {:row y :item i})
+                                                       false)
+                     :style (assoc cell-style :background-color (row-color y))}
    [text {:style {:text-align "center"}} i]])
 
 (defn empty-cell []

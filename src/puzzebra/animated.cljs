@@ -32,6 +32,17 @@
           (.-PanResponder ReactNative)
           (clj->js (reduce (fn [acc [k v]] (assoc acc (k key-names) v)) {} config)))))))
 
+(defn fade-in []
+  (let [opacity (new animated-value 0)]
+    (-> opacity
+        (animated.timing #js {:toValue 1})
+        (.start))
+    (fn []
+      (let [this (r/current-component)]
+        (into
+          [animated-view (update (r/props this) :style assoc :opacity opacity)]
+          (r/children this))))))
+
 (defn draggable [{:keys [on-move on-release on-start-should-set on-grant]
                   :or {on-start-should-set (constantly true)
                        on-grant identity
@@ -63,8 +74,8 @@
                                             (let [[x y] (mapv - dest-pt lpt)]
                                               (reset! drag-start-pt [x y])
                                               (.flattenOffset pan)
-                                              (-> animated
-                                                  (.spring pan (clj->js {:toValue {:x x :y y}}))
+                                              (-> pan
+                                                  (animated.spring (clj->js {:toValue {:x x :y y}}))
                                                   (.start)))))))})]
     (fn []
       (let [this (r/current-component)
