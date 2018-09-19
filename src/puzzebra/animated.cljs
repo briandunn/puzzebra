@@ -1,6 +1,5 @@
-;; very simple example on how to use Animated with reagent
-;; https://facebook.github.io/react-native/docs/animations.html
 (ns puzzebra.animated
+  (:import [goog.async Throttle])
   (:require
     ["react-native" :as ReactNative]
     [reagent.core :as r :refer [atom]]))
@@ -42,6 +41,7 @@
         drag-start-pt (atom [0 0]) ; component relative
         on-layout #(->> % (.-nativeEvent) (.-layout) (get-fields ["x" "y"]) (reset! layout-pt))
         pan (new animated-value-xy)
+        on-move (new Throttle (fn [state] (on-move (mapv + (get-fields ["dx" "dy"] state) @layout-pt))) 250)
         pan-handlers (create-pan-responder
                        {:on-start-should-set on-start-should-set
                         :on-grant (fn []
@@ -52,9 +52,8 @@
                                     (on-grant))
                         :on-move (animated-event
                                    [nil {:dx pan.x :dy pan.y}]
-                                   {:listener
-                                    (fn [_ state]
-                                      (on-move (mapv + (get-fields ["dx" "dy"] state) @layout-pt)))})
+                                   {:listener (fn [_ state]
+                                                (.fire on-move state))})
                         :on-release (fn [_ state]
                                       (let [lpt @layout-pt]
                                         (on-release

@@ -20,18 +20,6 @@
 
 (defn get-fields [fields js] (mapv (partial aget js) fields))
 
-(defn create-pan-responder [config]
-  (let [call-with-delta #(fn [_ state] (% (get-fields ["dx" "dy"] state)))
-        key-names {:on-start-should-set :onStartShouldSetPanResponder
-                   :on-release :onPanResponderRelease
-                   :on-grant :onPanResponderGrant
-                   :on-move :onPanResponderMove}]
-    (js->clj
-      (.-panHandlers
-        (.create
-          (.-PanResponder ReactNative)
-          (clj->js (reduce (fn [acc [k v]] (assoc acc (k key-names) (call-with-delta v))) {} config)))))))
-
 (defn round-to-nearest [size value] (* size (.round js/Math (/ value size))))
 
 (defn on-layout [callback]
