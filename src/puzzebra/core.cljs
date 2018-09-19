@@ -2,6 +2,7 @@
   (:require
     ["react-native" :as ReactNative]
     [clojure.spec.alpha :as s]
+    [clojure.set :refer [difference]]
     [clojure.pprint :refer [pprint]]
     [reagent.core :as r :refer [adapt-react-class reactify-component]]
     [puzzebra.game :as game]
@@ -186,16 +187,31 @@
                    (range)))])))
 
 (defn board [in-house size]
-  (let []
-    (fn []
-      [view {:style (clue-frame-style size)
-             :on-layout (on-layout (partial swap! state assoc :board-rect))}
-       (for [y (range size) x (range size)]
-         (let [i (some (fn [[[clue-y i] clue-x]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))
-               k (str x " " y)]
-           (if i
-             ^{:key k}[cell i y]
-             ^{:key k}[view {:style cell-style}])))])))
+  [view {:style (clue-frame-style size)
+         :on-layout (on-layout (partial swap! state assoc :board-rect))}
+   (for [y (range size) x (range size)]
+     (let [i (some (fn [[[clue-y i] clue-x]] (and (= x clue-x) (= y clue-y) i)) (map :clue/args in-house))
+           k (str x " " y)]
+       (if i
+         ^{:key k}[cell i y]
+         ^{:key k}[view {:style cell-style}])))])
+
+(defn fill-in [{{{width :puzzle/width} :puzzle/grid
+                 clues :puzzle/clues
+                 solution :puzzle/solution} :puzzle/puzzle
+                :as state}]
+  (let [in-house (filter #(= (:clue/type %) :in-house) clues)]
+    (if @won?
+      ; fill in the rest of the board with in-house clues
+      (->>
+        state
+        game/->board
+        keys
+        set
+        (difference (set (for [x (range width) y (range width)] [y x])))
+        (map (fn [[row col]] {:clue/args [[row (get solution [row col])] col]}))
+        (concat in-house))
+      in-house)))
 
 (defn root []
   (let [size 5]
@@ -209,14 +225,15 @@
                      :flex 1
                      :justify-content "center"}}
        (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
-         (let [{in-house true other-clues false} (group-by #(= (:clue/type %) :in-house) clues)]
+         (let [other-clues (filter #(not= (:clue/type %) :in-house) clues)]
            (into [view {:style {:width "100%"
                                 :justify-content "center"
                                 :align-items "center"
                                 :background-color "#eee"
                                 :flex-direction "row"
-                                :flex-wrap "wrap"
-                                }} ] (conj (doall (map (fn [clue] ^{:key clue}[piece clue]) (sort-by :clue/type other-clues))) [board in-house size]))))
-       (when @won? [text "you win!"])])))
+                                :flex-wrap "wrap"}}]
+                 (conj
+                   (doall (map (fn [clue] ^{:key clue}[piece clue]) (sort-by :clue/type other-clues)))
+                   [board (fill-in @state) size]))))])))
 
 (def app (reactify-component root))
