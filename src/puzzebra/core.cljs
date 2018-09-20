@@ -213,27 +213,66 @@
         (concat in-house))
       in-house)))
 
+(def button (-> ReactNative .-Button adapt-react-class))
+
+(defn game [{{clues :puzzle/clues
+              {width :puzzle/width} :puzzle/grid} :puzzle/puzzle, :as s}]
+  (let [other-clues (filter #(not= (:clue/type %) :in-house) clues)
+        new-game #(reset! state nil)]
+    [view
+     [button {:title "New Game" :on-press new-game}]
+    (into [view {:style {:width "100%"
+                         :justify-content "center"
+                         :align-items "center"
+                         :background-color "#fafbfc"
+                         :flex-direction "row"
+                         :flex-wrap "wrap"}}]
+          (conj
+            (doall (map (fn [clue] ^{:key clue}[piece clue]) (sort-by :clue/type other-clues)))
+            [board (fill-in s) width]))]))
+
+(def slider (-> ReactNative .-Slider adapt-react-class))
+
+(defn new-game []
+  (let [config (atom {:difficulty 1 :size 4})
+        difficulties (keys puzzle/difficulties)
+        change-difficulty (partial swap! config assoc :difficulty)
+        change-size (partial swap! config assoc :size)
+        press-new-game #(puzzle/fetch
+                          (update @config :difficulty (partial nth difficulties))
+                          (partial reset! state))]
+    (fn []
+      (let [{:keys [size difficulty]} @config]
+        [view {:style {:width "50%" :height "50%" :justify-content "space-evenly"}}
+         [view
+          [view {:style {:flex-direction "row" :justify-content "space-between"}}
+           [text {:style {:font-weight "bold"}} "difficulty"]
+           [text (nth difficulties difficulty)]]
+          [slider {:on-value-change change-difficulty
+                   :step 1
+                   :maximum-value 2
+                   :value difficulty}]]
+         [view
+          [view {:style {:flex-direction "row" :justify-content "space-between"}}
+           [text {:style {:font-weight "bold"}} "size"]
+           [text (str size "x" size)]]
+          [slider {:on-value-change change-size
+                   :step 1
+                   :minimum-value 3
+                   :maximum-value 7
+                   :value size}]]
+         [button {:title "Start" :on-press press-new-game}]]))))
+
 (defn root []
   (let [size 5]
-    (puzzle/fetch {:difficulty "normal" :size size} (partial reset! state))
     (fn []
-      [view {:style {:align-items "center"
-                     :background-color "#fff"
-                     :border-style "solid"
-                     :border-width 1
-                     :border-color "yellow"
-                     :flex 1
-                     :justify-content "center"}}
-       (when-let [clues (get-in @state [:puzzle/puzzle :puzzle/clues])]
-         (let [other-clues (filter #(not= (:clue/type %) :in-house) clues)]
-           (into [view {:style {:width "100%"
-                                :justify-content "center"
-                                :align-items "center"
-                                :background-color "#eee"
-                                :flex-direction "row"
-                                :flex-wrap "wrap"}}]
-                 (conj
-                   (doall (map (fn [clue] ^{:key clue}[piece clue]) (sort-by :clue/type other-clues)))
-                   [board (fill-in @state) size]))))])))
+      (let [s @state]
+        [view {:style {:align-items "center"
+                       :background-color "#fff"
+                       :flex 1
+                       :justify-content "center"}}
+         (if (:puzzle/puzzle s)
+           [game s]
+           [new-game])]))))
 
 (def app (reactify-component root))
