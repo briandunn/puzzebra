@@ -2,45 +2,19 @@
   (:import [goog.async Throttle])
   (:require
     ["react-native" :as ReactNative]
+    [puzzebra.rn :refer [get-fields create-pan-responder on-layout]]
+    [puzzebra.rn.animated :refer [view value value-xy event timing spring]]
     [reagent.core :as r :refer [atom]]))
 
-(def animated (.-Animated ReactNative))
-(def animated-value (.-Value animated))
-(def animated-value-xy (.-ValueXY animated))
-(def animated-view (r/adapt-react-class (.-View animated)))
-
-(defn animated-event [mapping & [config]]
-  (.event animated (clj->js mapping) (clj->js (or config {}))))
-
-(defn get-fields [fields js] (mapv (partial aget js) fields))
-
-(defn on-layout [callback]
-  #(->>
-     (.. % -nativeEvent -layout)
-     (get-fields ["x" "y" "width" "height"])
-     (zipmap [:x :y :width :height])
-     callback))
-
-(defn create-pan-responder [config]
-  (let [key-names {:on-start-should-set :onStartShouldSetPanResponder
-                   :on-release :onPanResponderRelease
-                   :on-grant :onPanResponderGrant
-                   :on-move :onPanResponderMove}]
-    (js->clj
-      (.-panHandlers
-        (.create
-          (.-PanResponder ReactNative)
-          (clj->js (reduce (fn [acc [k v]] (assoc acc (k key-names) v)) {} config)))))))
-
 (defn fade-in []
-  (let [opacity (new animated-value 0)]
+  (let [opacity (value 0)]
     (-> opacity
-        (animated.timing #js {:toValue 1})
+        (timing {:toValue 1})
         (.start))
     (fn []
       (let [this (r/current-component)]
         (into
-          [animated-view (update (r/props this) :style assoc :opacity opacity)]
+          [view (update (r/props this) :style assoc :opacity opacity)]
           (r/children this))))))
 
 (defn draggable [{:keys [on-move on-release on-start-should-set on-grant]
@@ -50,8 +24,8 @@
                        on-release identity}}]
   (let [layout-pt (atom nil)       ; parent relative
         drag-start-pt (atom [0 0]) ; component relative
-        on-layout #(->> % (.-nativeEvent) (.-layout) (get-fields ["x" "y"]) (reset! layout-pt))
-        pan (new animated-value-xy)
+        on-layout (on-layout (fn [{:keys [x y]}] (reset! layout-pt [x y])))
+        pan (value-xy {:x 0 :y 0})
         on-move (new Throttle (fn [state] (on-move (mapv + (get-fields ["dx" "dy"] state) @layout-pt))) 250)
         pan-handlers (create-pan-responder
                        {:on-start-should-set on-start-should-set
@@ -61,7 +35,7 @@
                                         (.setOffset #js {:x x :y y})
                                         (.setValue #js {:x 0 :y 0})))
                                     (on-grant))
-                        :on-move (animated-event
+                        :on-move (event
                                    [nil {:dx pan.x :dy pan.y}]
                                    {:listener (fn [_ state]
                                                 (.fire on-move state))})
@@ -75,7 +49,7 @@
                                               (reset! drag-start-pt [x y])
                                               (.flattenOffset pan)
                                               (-> pan
-                                                  (animated.spring (clj->js {:toValue {:x x :y y}}))
+                                                  (spring {:toValue {:x x :y y}})
                                                   (.start)))))))})]
     (fn []
       (let [this (r/current-component)
@@ -84,4 +58,4 @@
                     pan-handlers
                     {:style (assoc style :transform (.getTranslateTransform pan))
                      :on-layout on-layout})]
-        (into [animated-view props] (r/children this))))))
+        (into [view props] (r/children this))))))

@@ -1,34 +1,21 @@
 (ns puzzebra.core
   (:require
-    ["react-native" :as ReactNative]
-    [clojure.spec.alpha :as s]
-    [clojure.set :refer [difference]]
     [clojure.pprint :refer [pprint]]
-    [reagent.core :as r :refer [adapt-react-class reactify-component]]
+    [clojure.set :refer [difference]]
+    [clojure.spec.alpha :as s]
+    [puzzebra.animated :as animated]
     [puzzebra.game :as game]
     [puzzebra.puzzle :as puzzle]
-    [puzzebra.animated :as animated]
+    [puzzebra.rn :refer [text view button slider on-layout]]
+    [reagent.core :as r]
     [reagent.ratom :refer [reaction cursor atom]]))
-
-(def text (adapt-react-class (.-Text ReactNative)))
-(def view (adapt-react-class (.-View ReactNative)))
-(def touchable-opacity (adapt-react-class (.-TouchableOpacity ReactNative)))
 
 (def state (atom {}))
 (def side-length 30)
 
 (defn p [x] (pprint x) x)
 
-(defn get-fields [fields js] (mapv (partial aget js) fields))
-
 (defn round-to-nearest [size value] (* size (.round js/Math (/ value size))))
-
-(defn on-layout [callback]
-  #(->>
-     (.. % -nativeEvent -layout)
-     (get-fields ["x" "y" "width" "height"])
-     (zipmap [:x :y :width :height])
-     callback))
 
 (defn row-range [args]
   (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row))))
@@ -213,8 +200,6 @@
         (concat in-house))
       in-house)))
 
-(def button (-> ReactNative .-Button adapt-react-class))
-
 (defn game [{{clues :puzzle/clues
               {width :puzzle/width} :puzzle/grid} :puzzle/puzzle, :as s}]
   (let [other-clues (filter #(not= (:clue/type %) :in-house) clues)
@@ -231,8 +216,6 @@
             (doall (map (fn [clue] ^{:key clue}[piece clue]) (sort-by :clue/type other-clues)))
             [board (fill-in s) width]))]))
 
-(def slider (-> ReactNative .-Slider adapt-react-class))
-
 (defn new-game []
   (let [config (atom {:difficulty 1 :size 4})
         difficulties (keys puzzle/difficulties)
@@ -246,16 +229,16 @@
         [view {:style {:width "50%" :height "50%" :justify-content "space-evenly"}}
          [view
           [view {:style {:flex-direction "row" :justify-content "space-between"}}
-           [text {:style {:font-weight "bold"}} "difficulty"]
-           [text (nth difficulties difficulty)]]
+           [text "difficulty"]
+           [text {:style {:font-weight "bold"}} (nth difficulties difficulty)]]
           [slider {:on-value-change change-difficulty
                    :step 1
                    :maximum-value 2
                    :value difficulty}]]
          [view
           [view {:style {:flex-direction "row" :justify-content "space-between"}}
-           [text {:style {:font-weight "bold"}} "size"]
-           [text (str size "x" size)]]
+           [text "size"]
+           [text {:style {:font-weight "bold"}} (str size "x" size)]]
           [slider {:on-value-change change-size
                    :step 1
                    :minimum-value 3
@@ -264,15 +247,13 @@
          [button {:title "Start" :on-press press-new-game}]]))))
 
 (defn root []
-  (let [size 5]
-    (fn []
-      (let [s @state]
-        [view {:style {:align-items "center"
-                       :background-color "#fff"
-                       :flex 1
-                       :justify-content "center"}}
-         (if (:puzzle/puzzle s)
-           [game s]
-           [new-game])]))))
+  (let [s @state]
+    [view {:style {:align-items "center"
+                   :background-color "#fff"
+                   :flex 1
+                   :justify-content "center"}}
+     (if (:puzzle/puzzle s)
+       [game s]
+       [new-game])]))
 
-(def app (reactify-component root))
+(def app (r/reactify-component root))
