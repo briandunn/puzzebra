@@ -6,7 +6,7 @@
     [puzzebra.animated :as animated]
     [puzzebra.game :as game]
     [puzzebra.puzzle :as puzzle]
-    [puzzebra.rn :refer [text view button slider on-layout]]
+    [puzzebra.rn :refer [text view button activity-indicator slider on-layout]]
     [reagent.core :as r]
     [reagent.ratom :refer [reaction cursor atom]]))
 
@@ -14,8 +14,6 @@
 (def side-length 30)
 
 (defn p [x] (pprint x) x)
-
-(defn round-to-nearest [size value] (* size (.round js/Math (/ value size))))
 
 (defn row-range [args]
   (let [[first-row last-row] (sort (map first args))] (range first-row (+ 1 last-row))))
@@ -129,7 +127,6 @@
    :flex-direction "row"
    :flex-wrap "wrap"
    :margin 10
-   :overflow "hidden"
    :width (* (+ 1 side-length) cells-wide)})
 
 (defn cell [i y]
@@ -217,34 +214,38 @@
             [board (fill-in s) width]))]))
 
 (defn new-game []
-  (let [config (atom {:difficulty 1 :size 4})
+  (let [config (atom {:difficulty 1 :size 4 :waiting false})
         difficulties (keys puzzle/difficulties)
         change-difficulty (partial swap! config assoc :difficulty)
         change-size (partial swap! config assoc :size)
-        press-new-game #(puzzle/fetch
-                          (update @config :difficulty (partial nth difficulties))
-                          (partial reset! state))]
+        press-new-game #(do
+                          (swap! config assoc :waiting true)
+                          (puzzle/fetch
+                            (update @config :difficulty (partial nth difficulties))
+                            (partial reset! state)))]
     (fn []
-      (let [{:keys [size difficulty]} @config]
-        [view {:style {:width "50%" :height "50%" :justify-content "space-evenly"}}
-         [view
-          [view {:style {:flex-direction "row" :justify-content "space-between"}}
-           [text "difficulty"]
-           [text {:style {:font-weight "bold"}} (nth difficulties difficulty)]]
-          [slider {:on-value-change change-difficulty
-                   :step 1
-                   :maximum-value 2
-                   :value difficulty}]]
-         [view
-          [view {:style {:flex-direction "row" :justify-content "space-between"}}
-           [text "size"]
-           [text {:style {:font-weight "bold"}} (str size "x" size)]]
-          [slider {:on-value-change change-size
-                   :step 1
-                   :minimum-value 3
-                   :maximum-value 7
-                   :value size}]]
-         [button {:title "Start" :on-press press-new-game}]]))))
+      (let [{:keys [size difficulty waiting]} @config]
+        (if waiting
+          [activity-indicator]
+          [view {:style {:width "50%" :height "50%" :justify-content "space-evenly"}}
+           [view
+            [view {:style {:flex-direction "row" :justify-content "space-between"}}
+             [text "difficulty"]
+             [text {:style {:font-weight "bold"}} (nth difficulties difficulty)]]
+            [slider {:on-value-change change-difficulty
+                     :step 1
+                     :maximum-value 2
+                     :value difficulty}]]
+           [view
+            [view {:style {:flex-direction "row" :justify-content "space-between"}}
+             [text "size"]
+             [text {:style {:font-weight "bold"}} (str size "x" size)]]
+            [slider {:on-value-change change-size
+                     :step 1
+                     :minimum-value 3
+                     :maximum-value 7
+                     :value size}]]
+           [button {:title "Start" :on-press press-new-game}]])))))
 
 (defn root []
   (let [s @state]

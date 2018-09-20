@@ -1,11 +1,12 @@
 (ns puzzebra.rn (:require ["react-native" :as ReactNative]
                           [reagent.core :refer [adapt-react-class]]))
 
-(def text (adapt-react-class (.-Text ReactNative)))
-(def view (adapt-react-class (.-View ReactNative)))
-(def touchable-opacity (adapt-react-class (.-TouchableOpacity ReactNative)))
+(def activity-indicator (-> ReactNative .-ActivityIndicator adapt-react-class))
 (def button (-> ReactNative .-Button adapt-react-class))
 (def slider (-> ReactNative .-Slider adapt-react-class))
+(def text (adapt-react-class (.-Text ReactNative)))
+(def touchable-opacity (adapt-react-class (.-TouchableOpacity ReactNative)))
+(def view (adapt-react-class (.-View ReactNative)))
 
 (defn get-fields [fields js] (mapv (partial aget js) fields))
 

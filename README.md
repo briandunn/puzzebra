@@ -7,7 +7,7 @@ X Pieces that don't match where dropped return to layout point.
 * Snap pieces together when dropped together, if the overlapping cell is a match. These new shapes can be drug now.
 * Animate everything.
 * Add new game form with board size and difficulty level inputs.
-* Win sequence fades in values for blank cells.
+X Win sequence fades in values for blank cells.
 * Indicate when a piece is over a valid drop point
 
 This project was bootstrapped with [Create React Native App](https://github.com/react-community/create-react-native-app).
