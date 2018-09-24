@@ -194,15 +194,16 @@
               difficulty :puzzle/difficulty} :puzzle/puzzle, :as s}]
   (let [other-clues (filter #(not= (:clue/type %) :in-house) clues)]
     [view
-    (into [view {:style {:width "100%"
-                         :justify-content "center"
-                         :align-items "center"
-                         :background-color "#fafbfc"
-                         :flex-direction "row"
-                         :flex-wrap "wrap"}}]
-          (conj
-            (doall (map (fn [clue] ^{:key clue}[piece clue]) (sort-by :clue/type other-clues)))
-            [board (fill-in s) width]))]))
+     (into [view {:style {:justify-content "center"
+                          :align-items "center"
+                          :background-color "#fafbfc"
+                          :flex-direction "row"
+                          :flex-wrap "wrap"}
+                  :on-layout (on-layout :game-height)
+                  }]
+           (conj
+             (doall (map (fn [clue] ^{:key clue}[piece clue]) (sort-by :clue/type other-clues)))
+             [board (fill-in s) width]))]))
 
 (defn new-game []
   (let [config (atom {:difficulty 1 :size 4 :waiting false})
@@ -265,7 +266,7 @@
                     :flex 1
                     :justify-content "center"
                     :margin-top 78
-                    :overflow "hidden"}}
+                    :overflow "hidden" }}
       (if (:puzzle/puzzle s)
         [game s]
         [new-game])]]))
