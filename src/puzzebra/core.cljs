@@ -50,11 +50,11 @@
 (defn snap-pt [cell-dist origin-pt]
   (->> cell-dist (map (partial * side-length)) (mapv + origin-pt)))
 
-(defn valid? [state clue position-pt]
+(defn valid? [state clue position-rect]
   (->> state
        :board-rect
        rect->pt
-       (cell-distance position-pt)
+       (cell-distance (rect->pt position-rect))
        reverse
        (game/valid? state clue)))
 
@@ -76,18 +76,18 @@
 (defn draggable []
   (let [{:keys [key on-press]} (r/props (r/current-component))
         position-rect (cursor state [:positions key])
-        position-pt (reaction (rect->pt @position-rect))
         placement (cursor state [:placements key])
         placed? (reaction (not (nil? @placement)))
-        valid? (reaction (valid? @state key @position-pt))
+        valid? (reaction (valid? @state key @position-rect))
         drag-handlers {:on-start-should-set #(-> state deref :touched-cell nil? not)
                        :on-release (fn [delta layout-pt spring-to]
                                      (if (and on-press (every? zero? delta))
                                        (on-press)
                                        (do
                                          (swap! state on-drop key layout-pt)
-                                         (spring-to @position-pt))))
+                                         (-> @position-rect rect->pt spring-to))))
                        :on-move (partial swap! state position-clue-at-point key)
+                       :on-layout (partial swap! state assoc-in [:positions key])
                        :on-grant (fn []
                                    (swap! state #(-> %
                                                      (game/displace key)

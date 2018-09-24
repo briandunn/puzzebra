@@ -2,7 +2,7 @@
   (:import [goog.async Throttle])
   (:require
     ["react-native" :as ReactNative]
-    [puzzebra.rn :refer [get-fields create-pan-responder on-layout]]
+    [puzzebra.rn :as rn :refer [get-fields create-pan-responder]]
     [puzzebra.rn.animated :refer [view value value-xy event timing spring]]
     [reagent.core :as r :refer [atom]]))
 
@@ -17,14 +17,17 @@
           [view (update (r/props this) :style assoc :opacity opacity)]
           (r/children this))))))
 
-(defn draggable [{:keys [on-move on-release on-start-should-set on-grant]
+(defn draggable [{:keys [on-move on-release on-start-should-set on-grant on-layout]
                   :or {on-start-should-set (constantly true)
+                       on-layout identity
                        on-grant identity
                        on-move identity
                        on-release identity}}]
   (let [layout-pt (atom nil)       ; parent relative
         drag-start-pt (atom [0 0]) ; component relative
-        on-layout (on-layout (fn [{:keys [x y]}] (reset! layout-pt [x y])))
+        on-layout (rn/on-layout (fn [{:keys [x y] :as rect}]
+                               (reset! layout-pt [x y])
+                               (on-layout rect)))
         pan (value-xy {:x 0 :y 0})
         on-move (new Throttle (fn [state] (on-move (mapv + (get-fields ["dx" "dy"] state) @layout-pt))) 250)
         pan-handlers (create-pan-responder
