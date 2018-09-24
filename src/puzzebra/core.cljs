@@ -10,7 +10,7 @@
     [reagent.ratom :refer [reaction cursor atom]]))
 
 (def state (atom {}))
-(def side-length 30)
+(def side-length 48)
 
 (defn p [x] (pprint x) x)
 
@@ -190,11 +190,10 @@
         []))))
 
 (defn game [{{clues :puzzle/clues
-              {width :puzzle/width} :puzzle/grid} :puzzle/puzzle, :as s}]
-  (let [other-clues (filter #(not= (:clue/type %) :in-house) clues)
-        new-game #(reset! state nil)]
+              {width :puzzle/width} :puzzle/grid
+              difficulty :puzzle/difficulty} :puzzle/puzzle, :as s}]
+  (let [other-clues (filter #(not= (:clue/type %) :in-house) clues)]
     [view
-     [button {:title "New Game" :on-press new-game}]
     (into [view {:style {:width "100%"
                          :justify-content "center"
                          :align-items "center"
@@ -241,12 +240,34 @@
 
 (defn root []
   (let [s @state]
-    [view {:style {:align-items "center"
-                   :background-color "#fff"
-                   :flex 1
-                   :justify-content "center"}}
-     (if (:puzzle/puzzle s)
-       [game s]
-       [new-game])]))
+    [view {:style {:height "100%"
+                   :width "100%"}}
+     (into
+       [view {:style {:align-items "center"
+                      :border-bottom-color "#ccc"
+                      :border-bottom-width 1
+                      :flex-direction "row"
+                      :height 48
+                      :justify-content "space-between"
+                      :left 0
+                      :margin-top 30
+                      :padding-left 8
+                      :padding-right 8
+                      :position "absolute"
+                      :right 0
+                      :top 0}}
+        [text {:style {:font-size 28}} "puzzebra"]]
+       (when-let [difficulty (get-in s [:puzzle/puzzle :puzzle/difficulty])]
+         [[animated/fade-in [text difficulty]]
+          [animated/fade-in [button {:title "New Game" :on-press #(reset! state nil)}]]]))
+     [view {:style {:align-items "center"
+                    :background-color "#fff"
+                    :flex 1
+                    :justify-content "center"
+                    :margin-top 78
+                    :overflow "hidden"}}
+      (if (:puzzle/puzzle s)
+        [game s]
+        [new-game])]]))
 
 (def app (r/reactify-component root))

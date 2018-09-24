@@ -376,4 +376,4 @@
                   :body body}))
       (.then #(.text %))
       (.then (partial t/read (t/reader :json)))
-      (.then callback))))
+      (.then (fn [puzzle] (callback (assoc-in puzzle [:puzzle/puzzle :puzzle/difficulty] difficulty)))))))
