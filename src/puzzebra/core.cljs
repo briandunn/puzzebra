@@ -1,7 +1,6 @@
 (ns puzzebra.core
   (:require
     [clojure.pprint :refer [pprint]]
-    [clojure.set :refer [difference]]
     [clojure.spec.alpha :as s]
     [puzzebra.animated :as animated]
     [puzzebra.game :as game]
@@ -180,22 +179,15 @@
          ^{:key k}[cell i y]
          ^{:key k}[view {:style cell-style}])))])
 
-(defn fill-in [{{{width :puzzle/width} :puzzle/grid
-                 clues :puzzle/clues
-                 solution :puzzle/solution} :puzzle/puzzle
+(defn fill-in [{{clues :puzzle/clues} :puzzle/puzzle
                 :as state}]
   (let [in-house (filter #(= (:clue/type %) :in-house) clues)]
-    (if @won?
-      ; fill in the rest of the board with in-house clues
-      (->>
-        state
-        game/->board
-        keys
-        set
-        (difference (set (for [x (range width) y (range width)] [y x])))
-        (map (fn [[row col]] {:clue/args [[row (get solution [row col])] col]}))
-        (concat in-house))
-      in-house)))
+    (apply
+      concat
+      in-house
+      (if @won?
+        (game/build-one-in-house-per-row state)
+        []))))
 
 (defn game [{{clues :puzzle/clues
               {width :puzzle/width} :puzzle/grid} :puzzle/puzzle, :as s}]

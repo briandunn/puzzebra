@@ -364,7 +364,7 @@
 
 (defn fetch [{:keys [difficulty size]} callback]
   (let [config [(list
-                  {:puzzle/puzzle [:puzzle/clues :puzzle/solution]}
+                  {:puzzle/puzzle [:puzzle/clues]}
                   (assoc (get difficulties difficulty) :size size))]
         body (t/write (t/writer :json) config)]
     (->

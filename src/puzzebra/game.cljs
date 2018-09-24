@@ -2,6 +2,7 @@
   (:require
     [clojure.spec.alpha :as s]
     [clojure.pprint :refer [pprint]]
+    [clojure.set :refer [difference]]
     [cognitect.transit :as t]))
 
 (defn p [x] (pprint x) x)
@@ -47,6 +48,20 @@
    (count placements)
    (count (filter #(not= (:clue/type %) :in-house) clues))))
 
+(defn build-one-in-house-per-row [{{{width :puzzle/width} :puzzle/grid} :puzzle/puzzle :as state}]
+  (let [values (set (range width))
+        get-first-missing-value (fn [col] (->> col set (difference values) first))]
+    (->> state
+         ->board
+         (group-by ffirst)
+         (map
+           (fn [[row cells]]
+             (let [[cols taken-values] (->> cells (map (fn [[[_ c] i]] [c i])) (apply map vector))
+                   missing-value (get-first-missing-value taken-values)]
+               (if missing-value
+                 [{:clue/args [[row missing-value] (get-first-missing-value cols)]}]
+                 [])))))))
+
 (defn unique? [col] (apply = (map count [(set col) col])))
 
 (defn flip [state clue]
@@ -66,10 +81,10 @@
     (map (partial map last))))
 
 (defn valid? [state clue [placed-row placed-col]]
-  (let [{{solution :puzzle/solution} :puzzle/puzzle} state
+  (let [{{{width :puzzle/width} :puzzle/grid} :puzzle/puzzle} state
         board (->board state)
         placements (clue->placements (update state :placements assoc clue placed-col) clue)
-        right-board-col (apply max (map second (keys solution)))
+        right-board-col (- width 1)
         clue-top-row (apply min (map (fn [[[row _] _]] row) placements))
         positioned-clue-cols (map (fn [[[_ col] _]] col) placements)]
     (and
