@@ -7,39 +7,39 @@
 
 (defn p [x] (pprint x) x)
 
-(defmulti clue->placements #(:clue/type %2))
+(defmulti rasterize-clue #(:clue/type %2))
 
-(defmethod clue->placements :next-to [{placements :placements flips :flips}
-                                      {args :clue/args :as clue}]
-  (let [placed-col (get placements clue 0)
-        flip? (get flips clue)]
-    (->>
-      (if flip? (reverse args) args)
-      (map (fn [col [row item]] [[row (+ placed-col col)] item]) (range)))))
+(defmethod rasterize-clue :next-to [{in-column :in-column flip? :flip?}
+                                    {args :clue/args :as clue}]
+  (->>
+    (if flip? (reverse args) args)
+    (map (fn [col [row item]] [[row (+ (or in-column 0) col)] item]) (range))))
 
-(defmethod clue->placements :same-house [{placements :placements} clue]
+(defmethod rasterize-clue :same-house [{in-column :in-column} clue]
   (->>
     clue
     :clue/args
-    (map (fn [[row item]] [[row (get placements clue 0)] item]))))
+    (map (fn [[row item]] [[row (or in-column 0)] item]))))
 
-(defmethod clue->placements :left-of [{placements :placements} clue]
+(defmethod rasterize-clue :left-of [{in-column :in-column} clue]
   (->>
     clue
     :clue/args
-    (map (fn [col [row item]] [[row (+ (get placements clue 0) col)] item]) (range))))
+    (map (fn [col [row item]] [[row (+ (or in-column 0) col)] item]) (range))))
 
 (defn kv->map [kv]
   (->> kv (reduce concat) (apply hash-map)))
 
-(defn ->board [{placements :placements {clues :puzzle/clues} :puzzle/puzzle :as state}]
+(defn ->board [{placements :placements
+                flips :flips
+                {clues :puzzle/clues} :puzzle/puzzle
+                :as state}]
   (let [board (->> clues
                    (filter #(= (:clue/type %) :in-house))
                    (map (fn [{[[y item] x] :clue/args}] [[y x] item])))]
     (->>
       placements
-      keys
-      (mapcat (partial clue->placements state))
+      (mapcat (fn [[clue col]] (rasterize-clue {:in-column col :flip? (get flips clue)} clue)))
       (concat board)
       kv->map)))
 
@@ -83,7 +83,7 @@
 (defn valid? [state clue [placed-row placed-col]]
   (let [{{{width :puzzle/width} :puzzle/grid} :puzzle/puzzle} state
         board (->board state)
-        placements (clue->placements (update state :placements assoc clue placed-col) clue)
+        placements (rasterize-clue {:in-column placed-col :flip? (get-in state [:flips clue])} clue)
         right-board-col (- width 1)
         clue-top-row (apply min (map (fn [[[row _] _]] row) placements))
         positioned-clue-cols (map (fn [[[_ col] _]] col) placements)]
