@@ -50,13 +50,21 @@
 (defn snap-pt [cell-dist origin-pt]
   (->> cell-dist (map (partial * side-length)) (mapv + origin-pt)))
 
-(defn valid? [state clue position-rect]
-  (->> state
-       :board-rect
-       rect->pt
-       (cell-distance (rect->pt position-rect))
-       reverse
-       (game/valid? state clue)))
+; (defn valid? [state clue position-rect]
+;   (pprint (for [[other position] (:positions state) :when (and (not= other clue) (collision? position position-rect))] other))
+;   (->> state
+;        :board-rect
+;        rect->pt
+;        (cell-distance (rect->pt position-rect))
+;        reverse
+;        (game/valid? state clue)))
+
+(defn valid? [[clue rect] [target-clue target-rect]]
+  ; (pprint (apply cell-distance (map rect->pt [rect target-rect])))
+  (pprint (map (partial game/rasterize-clue {}) [clue target-clue]))
+  false)
+
+(def positions (cursor state [:positions]))
 
 (defn on-drop [state clue start-pt]
   (or
@@ -76,9 +84,11 @@
 (defn draggable []
   (let [{:keys [key on-press]} (r/props (r/current-component))
         position-rect (cursor state [:positions key])
+        other-positions (reaction (filter (fn [[clue rect]] (not= clue key)) @positions))
+        collisions (reaction (filter (fn [[clue rect]] (collision? @position-rect rect)) @other-positions))
         placement (cursor state [:placements key])
         placed? (reaction (not (nil? @placement)))
-        valid? (reaction (valid? @state key @position-rect))
+        valid? (reaction  (some (partial valid? [key @position-rect]) @collisions))
         drag-handlers {:on-start-should-set #(-> state deref :touched-cell nil? not)
                        :on-release (fn [delta layout-pt spring-to]
                                      (if (and on-press (every? zero? delta))
